@@ -5,10 +5,9 @@
 4. open terminal in altosRadarRos
    roscore
 5. open terminal in altosRadarRos
-rosrun rviz rviz
-open File-->Open Config-->choose altosradar.rviz
-
+   rosrun rviz rviz
+   open File-->Open Config-->choose altosradar.rviz
 6. open terminal in altosRadarRos
-     source devel/setup.bash
-       rosrun  altosradar altosRadarParse  
+   source devel/setup.bash
+   rosrun  altosradar altosRadarParse  
    

@@ -1,0 +1,2 @@
+altosradar
+-DCATKIN_DEVEL_PREFIX=/home/xiaoboli/work/github-public/altosRadarRos/devel -DCMAKE_INSTALL_PREFIX=/home/xiaoboli/work/github-public/altosRadarRos/install -G Unix Makefiles
