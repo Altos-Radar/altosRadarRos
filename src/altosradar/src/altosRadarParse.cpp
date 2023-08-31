@@ -16,17 +16,23 @@
 #include <sys/time.h>
 #include <algorithm>
 using namespace std;
-#define widthSet 4020
+#define widthSet 4220
 #define PORT 4040
 #define vrMax 60
 #define vrMin -60
-#define errThr 1
+#define errThr 3
 float hist(float *vr,float *histBuf,float step,int vrInd)
 {
     int ind = 0;
     for(int i = 0;i<vrInd;i++)
     {
         ind = (vr[i] - vrMin)/step;
+        if(vr[i]>60||vr[i]<-60)
+        {
+            // printf("vr[%d] = %f\n",ind,vr[i]);
+            continue;
+        }
+
         histBuf[ind]++;
     }
     return float((max_element(histBuf,histBuf+(int((vrMax-vrMin)/step))) - histBuf))*step+vrMin;
@@ -113,7 +119,11 @@ int main(int argc,char **argv)
         ret = recvfrom(sockfd, recvBuf, 1440, 0, (struct sockaddr *)&from, &len);
         if (ret > 0)
 		{
+            
             fwrite(recvBuf, 1, ret, fp);
+
+            // printf("pointCloudBuf.pckHeader.objectCount = %d \tpckHeader.curObjNum = %d\n",pointCloudBuf.pckHeader.curObjInd,pointCloudBuf.pckHeader.curObjNum);
+ 
             // long tmpTime = pointCloudBuf.pckHeader.sec;
             // localtime_r(&tmpTime, &tm);
             // printf("%d_%d_%d_%d_%d_%d\n",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,pointCloudBuf.pckHeader.sec);
@@ -121,6 +131,10 @@ int main(int argc,char **argv)
             objectCnt = pointCloudBuf.pckHeader.objectCount;
             pointCloudBuf.pckHeader.curObjInd = pointCloudBuf.pckHeader.curObjInd*30;
             tmp = pointCloudBuf.pckHeader.frameId;
+            // if(pointCloudBuf.pckHeader.mode==1)
+            // {
+            //     continue;
+            // }
             if(frameId == 0 || frameId == tmp)
             {
                 frameId = tmp;
