@@ -97,7 +97,7 @@ int main(int argc,char **argv)
     gettimeofday(&tv, NULL);
     localtime_r(&tv.tv_sec, &tm);
     char filePath[1024];
-    sprintf(filePath,"%d_%d_%d_%d_%d_%d.dat",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec);
+    sprintf(filePath,"data//%d_%d_%d_%d_%d_%d.dat",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec);
     FILE *fp = fopen(filePath,"wb");
     int frameId = 0;
     int objectCntFrame = 0;
