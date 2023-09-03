@@ -11,11 +11,11 @@
    source devel/setup.bash
    rosrun  altosradar altosRadarParse  
    
+------------------------------------------------------------------------------------   
    
    
-   
-   OR
-   1. git clone git@github.com:Altos-Radar/altosRadarRos.git
+OR
+1. git clone git@github.com:Altos-Radar/altosRadarRos.git
 2. cd altosRadarRos
 3. catkin_make
 4. open terminal in altosRadarRos
