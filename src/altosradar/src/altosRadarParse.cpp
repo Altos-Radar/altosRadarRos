@@ -184,6 +184,7 @@ int main(int argc,char **argv)
                 ros::Duration(0.005).sleep();
                 pcl::toROSMsg(cloud, output); 
                 output.header.frame_id = "altosRadar"; 
+                output.header.stamp = ros::Time::now();; 
                 pub.publish(output);
                 frameId = tmp;
                 for(int i = 0;i<widthSet;i++)
