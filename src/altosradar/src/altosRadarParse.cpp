@@ -21,6 +21,7 @@ using namespace std;
 #define vrMax 60
 #define vrMin -60
 #define errThr 3
+#define PI 3.1415926
 float hist(float *vr,float *histBuf,float step,int vrInd)
 {
     int ind = 0;
@@ -37,9 +38,22 @@ float hist(float *vr,float *histBuf,float step,int vrInd)
     }
     return float((max_element(histBuf,histBuf+(int((vrMax-vrMin)/step))) - histBuf))*step+vrMin;
 }
+
+float rcsCal(float range,float azi,float snr,float *rcsBuf)
+{
+    int ind = (azi*180/PI+60.1)*10;
+    float rcs = powf32(range,2.6)*snr/5.0e5/rcsBuf[ind];
+    return rcs;
+}
+
 int main(int argc,char **argv)
 {
-    
+    float *rcsBuf = (float*)malloc(1201*sizeof(float));
+    FILE *fp_rcs = fopen("data//rcs.dat","rb");
+    fread(rcsBuf,1021,sizeof(float),fp_rcs);
+    fclose(fp_rcs);
+
+
     ros::init(argc, argv, "altosRadar");
     ros::NodeHandle nh;
     ros::Publisher pub = nh.advertise<sensor_msgs::PointCloud2>("altosRadar", 1);
@@ -148,7 +162,7 @@ int main(int argc,char **argv)
                         cloud.points[pointCloudBuf.pckHeader.curObjInd+i].y = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].azi-offsetAzi)*cos(pointCloudBuf.point[i].ele);; 
                         cloud.points[pointCloudBuf.pckHeader.curObjInd+i].z = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].ele) ; 
                         cloud.points[pointCloudBuf.pckHeader.curObjInd+i].h = pointCloudBuf.point[i].doppler; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].s = 10*log10(pointCloudBuf.point[i].snr); 
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].s = rcsCal(pointCloudBuf.point[i].range,pointCloudBuf.point[i].azi,pointCloudBuf.point[i].snr,rcsBuf);
                         vr[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].doppler/cos(pointCloudBuf.point[i].azi-offsetAzi);
                         vrAzi[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].azi;
                     }
@@ -206,7 +220,7 @@ int main(int argc,char **argv)
                         cloud.points[pointCloudBuf.pckHeader.curObjInd+i].y = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].azi-offsetAzi);;
                         cloud.points[pointCloudBuf.pckHeader.curObjInd+i].z = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].ele) ; 
                         cloud.points[pointCloudBuf.pckHeader.curObjInd+i].h = pointCloudBuf.point[i].doppler; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].s = 10*log10(pointCloudBuf.point[i].snr); 
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].s = rcsCal(pointCloudBuf.point[i].range,pointCloudBuf.point[i].azi,pointCloudBuf.point[i].snr,rcsBuf);
                         vr[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].doppler/cos(pointCloudBuf.point[i].azi-offsetAzi);
                         vrAzi[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].azi;    
                     }
