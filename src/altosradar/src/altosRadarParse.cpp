@@ -28,24 +28,27 @@ float hist(float *vr,float *histBuf,float step,int vrInd)
     for(int i = 0;i<vrInd;i++)
     {
         ind = (vr[i] - vrMin)/step;
-        if(vr[i]>60||vr[i]<-60)
+        // printf("ind = %d\n",i);
+
+        if(vr[i]>60||vr[i]<-60||isnan(vr[i]))
         {
             // printf("vr[%d] = %f\n",ind,vr[i]);
             continue;
         }
+        if(vr[i]<=0  && vr[i]>-40)
+        {
 
-        histBuf[ind]++;
+            histBuf[ind]++;
+        }
     }
     return float((max_element(histBuf,histBuf+(int((vrMax-vrMin)/step))) - histBuf))*step+vrMin;
 }
-
 float rcsCal(float range,float azi,float snr,float *rcsBuf)
 {
     int ind = (azi*180/PI+60.1)*10;
-    float rcs = powf32(range,2.6)*snr/5.0e5/rcsBuf[ind];
+    float rcs = powf32(range,2.6)*snr/5.0e6/rcsBuf[ind];
     return rcs;
 }
-
 int main(int argc,char **argv)
 {
     float *rcsBuf = (float*)malloc(1201*sizeof(float));
@@ -53,14 +56,13 @@ int main(int argc,char **argv)
     fread(rcsBuf,1021,sizeof(float),fp_rcs);
     fclose(fp_rcs);
 
-
     ros::init(argc, argv, "altosRadar");
     ros::NodeHandle nh;
     ros::Publisher pub = nh.advertise<sensor_msgs::PointCloud2>("altosRadar", 1);
     sensor_msgs::PointCloud2 output; 
     pcl::PointCloud<pcl::PointXYZHSV> cloud; 
     printf("---------------------------\n");
-    cloud.width = widthSet; 
+    cloud.width = widthSet*2; 
     cloud.height = 1; 
     cloud.points.resize(cloud.width * cloud.height);
     
@@ -111,7 +113,7 @@ int main(int argc,char **argv)
     gettimeofday(&tv, NULL);
     localtime_r(&tv.tv_sec, &tm);
     char filePath[1024];
-    sprintf(filePath,"data//%d_%d_%d_%d_%d_%d.dat",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec);
+    sprintf(filePath,"data//%d_%d_%d_%d_%d_%d_altos.dat",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec);
     FILE *fp = fopen(filePath,"wb");
     int frameId = 0;
     int objectCntFrame = 0;
@@ -127,7 +129,10 @@ int main(int argc,char **argv)
     int vrInd = 0;
     float vrEst = 0;
     int cntFrameobj = 30;
-
+    int installFlag = -1;
+    unsigned char modeFlag = 0;
+    long tmpTime = pointCloudBuf.pckHeader.sec;
+    FILE *fp_time = fopen("timeVal.txt","wt");
     while(ros::ok())
     {
         ret = recvfrom(sockfd, recvBuf, 1440, 0, (struct sockaddr *)&from, &len);
@@ -145,6 +150,7 @@ int main(int argc,char **argv)
             objectCnt = pointCloudBuf.pckHeader.objectCount;
             pointCloudBuf.pckHeader.curObjInd = pointCloudBuf.pckHeader.curObjInd*30;
             tmp = pointCloudBuf.pckHeader.frameId;
+            modeFlag = tmp%2;
             // if(pointCloudBuf.pckHeader.mode==1)
             // {
             //     continue;
@@ -156,14 +162,16 @@ int main(int argc,char **argv)
                 {
                     if(abs(pointCloudBuf.point[i].range)>0)
                     {
-                        pointCloudBuf.point[i].ele = -(pointCloudBuf.point[i].ele -offsetEle);
-                        pointCloudBuf.point[i].azi = asin(sin(pointCloudBuf.point[i].azi)/cos(pointCloudBuf.point[i].ele));
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].x = (pointCloudBuf.point[i].range-offsetRange)*cos(pointCloudBuf.point[i].azi-offsetAzi)*cos(pointCloudBuf.point[i].ele); 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].y = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].azi-offsetAzi)*cos(pointCloudBuf.point[i].ele);; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].z = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].ele) ; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].h = pointCloudBuf.point[i].doppler; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].s = rcsCal(pointCloudBuf.point[i].range,pointCloudBuf.point[i].azi,pointCloudBuf.point[i].snr,rcsBuf);
+                        pointCloudBuf.point[i].ele = installFlag*(pointCloudBuf.point[i].ele -offsetEle);
+                        pointCloudBuf.point[i].azi = -installFlag*asin(sin(pointCloudBuf.point[i].azi)/cos(pointCloudBuf.point[i].ele));
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].x = (pointCloudBuf.point[i].range-offsetRange)*cos(pointCloudBuf.point[i].azi-offsetAzi)*cos(pointCloudBuf.point[i].ele); 
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].y = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].azi-offsetAzi)*cos(pointCloudBuf.point[i].ele);; 
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].z = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].ele) ; 
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].h = pointCloudBuf.point[i].doppler; 
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].s = rcsCal(pointCloudBuf.point[i].range,pointCloudBuf.point[i].azi,pointCloudBuf.point[i].snr,rcsBuf);
                         vr[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].doppler/cos(pointCloudBuf.point[i].azi-offsetAzi);
+                        // printf("ind =%d\t %f\n",pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag,cos(pointCloudBuf.point[i].azi-offsetAzi));
+
                         vrAzi[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].azi;
                     }
                 }
@@ -178,49 +186,62 @@ int main(int argc,char **argv)
                     printf("-------------------------dataLoss %d\t%d\t%d pack(s) in %d packs------------------------\n",cntFrameobj,objectCntLast,(objectCntLast - cntFrameobj)/POINTNUM,objectCntLast/POINTNUM);
                 }
                 memset(histBuf,0,sizeof(float)*int((vrMax-vrMin)/step));
+                // printf("Frame %d: objectCnt is %d\n",frameId,objectCntLast);
                 vrEst = hist(vr,histBuf,step,vrInd);
                 printf("Frame %d: objectCnt is %d\n",frameId,objectCntLast);
                 cntFrameobj = 30;
                 objectCntLast = objectCnt;
                 for(i = 0;i<vrInd;i++)
                 {
-                    cloud.points[i].v = cloud.points[i].h - vrEst*cos(vrAzi[i]);
-                    if(cloud.points[i].v<-errThr)
+                    cloud.points[i+widthSet*(frameId%2)].v = cloud.points[i+widthSet*(frameId%2)].h - vrEst*cos(vrAzi[i]);
+                    if(cloud.points[i+widthSet*(frameId%2)].v<-errThr)
                     {
-                        cloud.points[i].v = -1;
-                    }else if(cloud.points[i].v>errThr)
+                        cloud.points[i+widthSet*(frameId%2)].v = -1;
+                    }else if(cloud.points[i+widthSet*(frameId%2)].v>errThr)
                     {
-                        cloud.points[i].v = 1;
+                        cloud.points[i+widthSet*(frameId%2)].v = 1;
                     }else{
-                        cloud.points[i].v = 0;
+                        cloud.points[i+widthSet*(frameId%2)].v = 0;
                     }
                 }
-                ros::Duration(0.005).sleep();
-                pcl::toROSMsg(cloud, output); 
-                output.header.frame_id = "altosRadar"; 
-                output.header.stamp = ros::Time::now();; 
-                pub.publish(output);
-                frameId = tmp;
-                for(int i = 0;i<widthSet;i++)
+                if(modeFlag==1||tmp - frameId==2)
                 {
-                    cloud.points[i].x = 0;
-                    cloud.points[i].y = 0;
-                    cloud.points[i].z = 0;
-                    cloud.points[i].h = 0;
-                    cloud.points[i].s = 0;
-                    cloud.points[i].v = 0;
+                    ros::Duration(0.005).sleep();
+                    pcl::toROSMsg(cloud, output); 
+                    output.header.frame_id = "altosRadar"; 
+                    output.header.stamp = ros::Time::now();; 
+                    pub.publish(output);
+                    for(int i = 0;i<widthSet*2;i++)
+                    {
+                        cloud.points[i].x = 0;
+                        cloud.points[i].y = 0;
+                        cloud.points[i].z = 0;
+                        cloud.points[i].h = 0;
+                        cloud.points[i].s = 0;
+                        cloud.points[i].v = 0;
+                    }
+                    struct timeval tv;
+
+                    long long t1;
+
+                    gettimeofday(&tv, NULL);
+
+                    t1 = tv.tv_sec * 1000ll + tv.tv_usec / 1000;
+                    localtime_r(&tmpTime, &tm);
+                    fprintf(fp_time,"%f\n",t1/1e3);
                 }
+                frameId = tmp;
                 for(int i = 0;i<pointCloudBuf.pckHeader.curObjNum;i++)
                 {
                     if(abs(pointCloudBuf.point[i].range)>0)
                     {
-                        pointCloudBuf.point[i].ele = -(pointCloudBuf.point[i].ele -offsetEle);
-                        pointCloudBuf.point[i].azi = asin(sin(pointCloudBuf.point[i].azi)/cos(pointCloudBuf.point[i].ele));
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].x = (pointCloudBuf.point[i].range-offsetRange)*cos(pointCloudBuf.point[i].azi-offsetAzi); 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].y = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].azi-offsetAzi);;
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].z = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].ele) ; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].h = pointCloudBuf.point[i].doppler; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i].s = rcsCal(pointCloudBuf.point[i].range,pointCloudBuf.point[i].azi,pointCloudBuf.point[i].snr,rcsBuf);
+                        pointCloudBuf.point[i].ele = installFlag*(pointCloudBuf.point[i].ele -offsetEle);
+                        pointCloudBuf.point[i].azi = -installFlag*asin(sin(pointCloudBuf.point[i].azi)/cos(pointCloudBuf.point[i].ele));
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].x = (pointCloudBuf.point[i].range-offsetRange)*cos(pointCloudBuf.point[i].azi-offsetAzi); 
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].y = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].azi-offsetAzi);;
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].z = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].ele) ; 
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].h = pointCloudBuf.point[i].doppler; 
+                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].s = rcsCal(pointCloudBuf.point[i].range,pointCloudBuf.point[i].azi,pointCloudBuf.point[i].snr,rcsBuf);
                         vr[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].doppler/cos(pointCloudBuf.point[i].azi-offsetAzi);
                         vrAzi[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].azi;    
                     }
@@ -235,5 +256,6 @@ int main(int argc,char **argv)
     close(sockfd);
     free(histBuf);
     fclose(fp);
+    fclose(fp_time);
     return 0;
 }
