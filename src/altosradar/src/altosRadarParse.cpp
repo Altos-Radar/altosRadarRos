@@ -173,23 +173,24 @@ int main(int argc,char **argv)
                         // printf("ind =%d\t %f\n",pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag,cos(pointCloudBuf.point[i].azi-offsetAzi));
 
                         vrAzi[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].azi;
+                        cntFrameobj++;
                     }
                 }
                 vrInd = pointCloudBuf.pckHeader.curObjInd + POINTNUM;
                 objectCntFrame = pointCloudBuf.pckHeader.curObjInd + POINTNUM;
                 objectCntLast = objectCnt;
-                cntFrameobj = cntFrameobj + 30;
+                // cntFrameobj = cntFrameobj + 30;
 
             }else{
-                if(cntFrameobj<objectCntLast)
+                if(objectCntLast - cntFrameobj>POINTNUM)
                 {
                     printf("-------------------------dataLoss %d\t%d\t%d pack(s) in %d packs------------------------\n",cntFrameobj,objectCntLast,(objectCntLast - cntFrameobj)/POINTNUM,objectCntLast/POINTNUM);
                 }
                 memset(histBuf,0,sizeof(float)*int((vrMax-vrMin)/step));
                 // printf("Frame %d: objectCnt is %d\n",frameId,objectCntLast);
                 vrEst = hist(vr,histBuf,step,vrInd);
-                printf("Frame %d: objectCnt is %d\n",frameId,objectCntLast);
-                cntFrameobj = 30;
+                printf("Frame %d: objectCnt is %d\n",frameId,cntFrameobj);
+                cntFrameobj = 0;
                 objectCntLast = objectCnt;
                 for(i = 0;i<vrInd;i++)
                 {
@@ -244,6 +245,7 @@ int main(int argc,char **argv)
                         cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].s = rcsCal(pointCloudBuf.point[i].range,pointCloudBuf.point[i].azi,pointCloudBuf.point[i].snr,rcsBuf);
                         vr[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].doppler/cos(pointCloudBuf.point[i].azi-offsetAzi);
                         vrAzi[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].azi;    
+                        cntFrameobj++;
                     }
                 }
                 vrInd = pointCloudBuf.pckHeader.curObjInd + POINTNUM;
