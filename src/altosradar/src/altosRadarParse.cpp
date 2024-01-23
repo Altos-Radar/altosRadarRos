@@ -12,9 +12,11 @@
 #include"pointCloud.h"
 #include <pcl/point_cloud.h> 
 #include <pcl_conversions/pcl_conversions.h> 
+#include <visualization_msgs/Marker.h>
 #include<math.h>
 #include <sys/time.h>
 #include <algorithm>
+#include<iostream>
 using namespace std;
 #define widthSet 4220
 #define PORT 4040
@@ -59,6 +61,26 @@ int main(int argc,char **argv)
     ros::init(argc, argv, "altosRadar");
     ros::NodeHandle nh;
     ros::Publisher pub = nh.advertise<sensor_msgs::PointCloud2>("altosRadar", 1);
+    ros::Publisher markerPub = nh.advertise<visualization_msgs::Marker>("TEXT_VIEW_FACING", 10);
+    visualization_msgs::Marker marker;
+
+    marker.ns = "basic_shapes";
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.pose.orientation.w = 1.0;
+    marker.id =0;
+    marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+    marker.scale.z = 10;
+    marker.color.b = 1.0f;
+    marker.color.g = 1.0f;
+    marker.color.r = 1.0f;
+    marker.color.a = 1;
+    geometry_msgs::Pose pose;
+    pose.position.x =  (float)-5;
+    pose.position.y =  0;
+    pose.position.z =0;
+
+
+
     sensor_msgs::PointCloud2 output; 
     pcl::PointCloud<pcl::PointXYZHSV> cloud; 
     printf("---------------------------\n");
@@ -132,6 +154,7 @@ int main(int argc,char **argv)
     int installFlag = -1;
     unsigned char modeFlag = 0;
     long tmpTime = pointCloudBuf.pckHeader.sec;
+    int cntPointCloud[2] = {0,0};
     FILE *fp_time = fopen("timeVal.txt","wt");
     while(ros::ok())
     {
@@ -190,6 +213,7 @@ int main(int argc,char **argv)
                 // printf("Frame %d: objectCnt is %d\n",frameId,objectCntLast);
                 vrEst = hist(vr,histBuf,step,vrInd);
                 printf("Frame %d: objectCnt is %d\n",frameId,cntFrameobj);
+                cntPointCloud[frameId%2] = cntFrameobj;
                 cntFrameobj = 0;
                 objectCntLast = objectCnt;
                 for(i = 0;i<vrInd;i++)
@@ -207,9 +231,17 @@ int main(int argc,char **argv)
                 }
                 if(modeFlag==1||tmp - frameId==2)
                 {
+
                     ros::Duration(0.005).sleep();
                     pcl::toROSMsg(cloud, output); 
                     output.header.frame_id = "altosRadar"; 
+                    marker.header.frame_id="altosRadar";
+                    marker.header.stamp = ros::Time::now();
+                    ostringstream str;
+                    str<<"pointNum:"<<cntPointCloud[0]+cntPointCloud[1];
+                    marker.text=str.str();
+                    marker.pose=pose;
+                    markerPub.publish(marker);
                     output.header.stamp = ros::Time::now();; 
                     pub.publish(output);
                     for(int i = 0;i<widthSet*2;i++)
