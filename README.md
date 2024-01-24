@@ -24,5 +24,5 @@ OR
   rosbag replay: 
   1. catkin_make
   2. source devel/setup.bash
-  3. roslaunch baidu_demo demo.launch
+  3. roslaunch demo demo.launch
   4. rosbag play xxx.bag
