@@ -20,3 +20,9 @@ OR
 3. catkin_make
 4. open terminal in altosRadarRos
    ./start.sh
+   
+  rosbag replay: 
+  1. catkin_make
+  2. source devel/setup.bash
+  3. roslaunch baidu_demo demo.launch
+  4. rosbag play xxx.bag
