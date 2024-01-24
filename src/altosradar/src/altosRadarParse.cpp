@@ -62,8 +62,30 @@ int main(int argc,char **argv)
     ros::NodeHandle nh;
     ros::Publisher pub = nh.advertise<sensor_msgs::PointCloud2>("altosRadar", 1);
     ros::Publisher markerPub = nh.advertise<visualization_msgs::Marker>("TEXT_VIEW_FACING", 10);
-    visualization_msgs::Marker marker;
+    ros::Publisher originPub = nh.advertise<visualization_msgs::Marker>("origin", 10);
 
+    visualization_msgs::Marker origin;
+    origin.header.frame_id = "altosRadar";
+    origin.type = visualization_msgs::Marker::SPHERE;
+    origin.action = visualization_msgs::Marker::ADD;
+
+    origin.pose.position.x = 0;
+    origin.pose.position.y = 0;
+    origin.pose.position.z = 0;
+    origin.pose.orientation.x = 0;
+    origin.pose.orientation.y = 0;
+    origin.pose.orientation.z = 0;
+    origin.pose.orientation.w = 1;
+
+    origin.scale.x = 3;
+    origin.scale.y = 3;
+    origin.scale.z = 3;
+    origin.color.r = 1.0;
+    origin.color.g = 1.0;
+    origin.color.b = 0.0;
+    origin.color.a = 1;
+
+    visualization_msgs::Marker marker;
     marker.ns = "basic_shapes";
     marker.action = visualization_msgs::Marker::ADD;
     marker.pose.orientation.w = 1.0;
@@ -78,8 +100,6 @@ int main(int argc,char **argv)
     pose.position.x =  (float)-5;
     pose.position.y =  0;
     pose.position.z =0;
-
-
 
     sensor_msgs::PointCloud2 output; 
     pcl::PointCloud<pcl::PointXYZHSV> cloud; 
@@ -158,6 +178,7 @@ int main(int argc,char **argv)
     FILE *fp_time = fopen("timeVal.txt","wt");
     while(ros::ok())
     {
+        originPub.publish(origin);
         ret = recvfrom(sockfd, recvBuf, 1440, 0, (struct sockaddr *)&from, &len);
         if (ret > 0)
 		{
