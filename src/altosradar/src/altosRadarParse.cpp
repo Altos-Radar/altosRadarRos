@@ -53,6 +53,10 @@ float rcsCal(float range,float azi,float snr,float *rcsBuf)
 }
 int main(int argc,char **argv)
 {
+    if(argc !=3)
+    {
+        printf("para cnt error!\n");
+    }
     float *rcsBuf = (float*)malloc(1201*sizeof(float));
     FILE *fp_rcs = fopen("data//rcs.dat","rb");
     fread(rcsBuf,1021,sizeof(float),fp_rcs);
@@ -108,55 +112,19 @@ int main(int argc,char **argv)
     cloud.height = 1; 
     cloud.points.resize(cloud.width * cloud.height);
     
-    struct sockaddr_in addr;
-    struct sockaddr_in from;
-
-    struct ip_mreq req;
-    socklen_t len = sizeof(from);
- 
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (-1 == sockfd)
-    {
-        perror("socket"); 
-        return 0;
-    }
-    struct timeval timeout = {1,300}; 
-    setsockopt(sockfd,SOL_SOCKET,SO_SNDTIMEO,(char *)&timeout,sizeof(struct timeval));
-    setsockopt(sockfd,SOL_SOCKET,SO_RCVTIMEO,(char *)&timeout,sizeof(struct timeval));
- 
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(PORT);
-    addr.sin_addr.s_addr = INADDR_ANY;
-    int ret = bind(sockfd, (struct sockaddr *)&addr, sizeof(addr));
-    if (-1 == ret)
-    {
-        perror("bind"); 
-        return 0;
-    }
- 
-    req.imr_multiaddr.s_addr = inet_addr("224.1.2.4");
-    req.imr_interface.s_addr = inet_addr(/*"0.0.0.0"*/"192.168.3.1");;
-    ret = setsockopt(sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &req, sizeof(req));
-    if (ret < 0)
-    {
-        perror("setsockopt"); 
-        return 0;
-    }
-    
     int recvFrameLen = 0;
 	int frameNum = 0;
     int tmp;
+    int ret;
     POINTCLOUD pointCloudBuf;
 	char* recvBuf= (char*)&pointCloudBuf;
-    struct timeval  tv;
-	struct tm tm;
-
-    gettimeofday(&tv, NULL);
-    localtime_r(&tv.tv_sec, &tm);
-    char filePath[1024];
-    sprintf(filePath,"data//%d_%d_%d_%d_%d_%d_altos.dat",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec);
-    FILE *fp = fopen(filePath,"wb");
+    FILE *fp = fopen(argv[2],"rb");
+    if (NULL == fp)
+    {
+        printf("File not exit!\n");
+        sleep(3);
+        return -1; /* 要返回错误代码 */
+    }
     int frameId = 0;
     int objectCntFrame = 0;
     int i;
@@ -175,30 +143,16 @@ int main(int argc,char **argv)
     unsigned char modeFlag = 0;
     long tmpTime = pointCloudBuf.pckHeader.sec;
     int cntPointCloud[2] = {0,0};
-    FILE *fp_time = fopen("timeVal.txt","wt");
     while(ros::ok())
     {
-        originPub.publish(origin);
-        ret = recvfrom(sockfd, recvBuf, 1440, 0, (struct sockaddr *)&from, &len);
+        ret = fread(recvBuf,1368,1,fp);
         if (ret > 0)
 		{
-            
-            fwrite(recvBuf, 1, ret, fp);
-
-            // printf("pointCloudBuf.pckHeader.objectCount = %d \tpckHeader.curObjNum = %d\n",pointCloudBuf.pckHeader.curObjInd,pointCloudBuf.pckHeader.curObjNum);
- 
-            // long tmpTime = pointCloudBuf.pckHeader.sec;
-            // localtime_r(&tmpTime, &tm);
-            // printf("%d_%d_%d_%d_%d_%d\n",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,pointCloudBuf.pckHeader.sec);
             pointCloudBuf.pckHeader.curObjNum = pointCloudBuf.pckHeader.curObjNum/44;
             objectCnt = pointCloudBuf.pckHeader.objectCount;
             pointCloudBuf.pckHeader.curObjInd = pointCloudBuf.pckHeader.curObjInd*30;
             tmp = pointCloudBuf.pckHeader.frameId;
             modeFlag = tmp%2;
-            // if(pointCloudBuf.pckHeader.mode==1)
-            // {
-            //     continue;
-            // }
             if(frameId == 0 || frameId == tmp)
             {
                 frameId = tmp;
@@ -223,15 +177,12 @@ int main(int argc,char **argv)
                 vrInd = pointCloudBuf.pckHeader.curObjInd + POINTNUM;
                 objectCntFrame = pointCloudBuf.pckHeader.curObjInd + POINTNUM;
                 objectCntLast = objectCnt;
-                // cntFrameobj = cntFrameobj + 30;
-
             }else{
                 if(objectCntLast - cntFrameobj>POINTNUM)
                 {
                     printf("-------------------------dataLoss %d\t%d\t%d pack(s) in %d packs------------------------\n",cntFrameobj,objectCntLast,(objectCntLast - cntFrameobj)/POINTNUM,objectCntLast/POINTNUM);
                 }
                 memset(histBuf,0,sizeof(float)*int((vrMax-vrMin)/step));
-                // printf("Frame %d: objectCnt is %d\n",frameId,objectCntLast);
                 vrEst = hist(vr,histBuf,step,vrInd);
                 printf("Frame %d: objectCnt is %d\n",frameId,cntFrameobj);
                 cntPointCloud[frameId%2] = cntFrameobj;
@@ -253,7 +204,7 @@ int main(int argc,char **argv)
                 if(modeFlag==1||tmp - frameId==2)
                 {
 
-                    ros::Duration(0.005).sleep();
+                    ros::Duration(0.1).sleep();
                     pcl::toROSMsg(cloud, output); 
                     output.header.frame_id = "altosRadar"; 
                     marker.header.frame_id="altosRadar";
@@ -264,6 +215,7 @@ int main(int argc,char **argv)
                     marker.pose=pose;
                     markerPub.publish(marker);
                     output.header.stamp = ros::Time::now();; 
+                    originPub.publish(origin);
                     pub.publish(output);
                     for(int i = 0;i<widthSet*2;i++)
                     {
@@ -274,15 +226,6 @@ int main(int argc,char **argv)
                         cloud.points[i].s = 0;
                         cloud.points[i].v = 0;
                     }
-                    struct timeval tv;
-
-                    long long t1;
-
-                    gettimeofday(&tv, NULL);
-
-                    t1 = tv.tv_sec * 1000ll + tv.tv_usec / 1000;
-                    localtime_r(&tmpTime, &tm);
-                    fprintf(fp_time,"%f\n",t1/1e3);
                 }
                 frameId = tmp;
                 for(int i = 0;i<pointCloudBuf.pckHeader.curObjNum;i++)
@@ -308,9 +251,7 @@ int main(int argc,char **argv)
             printf("recv failed (timeOut)   %d\n",ret);
         }
     }
-    close(sockfd);
     free(histBuf);
     fclose(fp);
-    fclose(fp_time);
     return 0;
 }
