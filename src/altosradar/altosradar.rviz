@@ -176,10 +176,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 2.0353198051452637
+      Scale: 2.4657766819000244
       Target Frame: <Fixed Frame>
-      X: 199.62744140625
-      Y: -17.632776260375977
+      X: 173.3431396484375
+      Y: -18.807876586914062
     Saved:
       - Angle: -1.5707999467849731
         Class: rviz/TopDownOrtho
@@ -191,10 +191,10 @@ Visualization Manager:
         Invert Z Axis: false
         Name: BirdseyeView
         Near Clip Distance: 0.009999999776482582
-        Scale: 2.0353198051452637
+        Scale: 2.4657766819000244
         Target Frame: <Fixed Frame>
-        X: 199.62744140625
-        Y: -17.632776260375977
+        X: 173.3431396484375
+        Y: -18.807876586914062
       - Class: rviz/Orbit
         Distance: 353.42327880859375
         Enable Stereo Rendering:
