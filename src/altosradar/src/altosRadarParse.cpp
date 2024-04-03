@@ -17,13 +17,44 @@
 #include <sys/time.h>
 #include <algorithm>
 #include<iostream>
+
+#include <image_transport/image_transport.h>
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/highgui/highgui.hpp>
+
 using namespace std;
-#define widthSet 4220
+#define widthSet 16000
 #define PORT 4040
 #define vrMax 60
 #define vrMin -60
 #define errThr 3
 #define PI 3.1415926
+#define RECVSIZEMAX 10000
+
+cv::Mat buffer2img(unsigned short* buffer, int height, int width)
+{
+    int ii=0;
+    int jj=0;
+    int heightId = 0;
+    cv::Mat image_holder(height,width, CV_16UC1);
+    
+    for(ii = 0;ii<height;ii++)
+    {
+        heightId = ii;
+        if(ii>=256)
+        {
+            heightId = ii - 512;
+        }
+        heightId = heightId + 256;
+        for(jj = 0;jj<width;jj++)
+        {
+            image_holder.at<ushort>(heightId,jj) = buffer[ii*512+jj];
+        }
+    }
+    return image_holder;
+}
+
+
 float hist(float *vr,float *histBuf,float step,int vrInd)
 {
     int ind = 0;
@@ -55,7 +86,7 @@ int main(int argc,char **argv)
 {
     float *rcsBuf = (float*)malloc(1201*sizeof(float));
     FILE *fp_rcs = fopen("data//rcs.dat","rb");
-    fread(rcsBuf,1021,sizeof(float),fp_rcs);
+    fread(rcsBuf,1201,sizeof(float),fp_rcs);
     fclose(fp_rcs);
 
     ros::init(argc, argv, "altosRadar");
@@ -63,7 +94,10 @@ int main(int argc,char **argv)
     ros::Publisher pub = nh.advertise<sensor_msgs::PointCloud2>("altosRadar", 1);
     ros::Publisher markerPub = nh.advertise<visualization_msgs::Marker>("TEXT_VIEW_FACING", 10);
     ros::Publisher originPub = nh.advertise<visualization_msgs::Marker>("origin", 10);
+    image_transport::ImageTransport it(nh);
+    image_transport::Publisher RDpub = it.advertise("altosRD", 1);
 
+    cv::Mat img;
     visualization_msgs::Marker origin;
     origin.header.frame_id = "altosRadar";
     origin.type = visualization_msgs::Marker::SPHERE;
@@ -91,13 +125,13 @@ int main(int argc,char **argv)
     marker.pose.orientation.w = 1.0;
     marker.id =0;
     marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
-    marker.scale.z = 10;
+    marker.scale.z = 1;
     marker.color.b = 1.0f;
     marker.color.g = 1.0f;
     marker.color.r = 1.0f;
     marker.color.a = 1;
     geometry_msgs::Pose pose;
-    pose.position.x =  (float)-5;
+    pose.position.x =  (float)-1;
     pose.position.y =  0;
     pose.position.z =0;
 
@@ -148,7 +182,10 @@ int main(int argc,char **argv)
 	int frameNum = 0;
     int tmp;
     POINTCLOUD pointCloudBuf;
-	char* recvBuf= (char*)&pointCloudBuf;
+    RDMAP rdMapLine;
+	char* recvPoint= (char*)&pointCloudBuf;
+	char* recvRD= (char*)&rdMapLine;
+    char*recvBuf = (char*)malloc(RECVSIZEMAX);
     struct timeval  tv;
 	struct tm tm;
 
@@ -156,7 +193,9 @@ int main(int argc,char **argv)
     localtime_r(&tv.tv_sec, &tm);
     char filePath[1024];
     sprintf(filePath,"data//%d_%d_%d_%d_%d_%d_altos.dat",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec);
-    FILE *fp = fopen(filePath,"wb");
+    FILE *fp_point = fopen(filePath,"wb");
+    sprintf(filePath,"data//%d_%d_%d_%d_%d_%d_altosRD.dat",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec);
+    FILE *fp_RD = fopen(filePath,"wb");
     int frameId = 0;
     int objectCntFrame = 0;
     int i;
@@ -168,6 +207,7 @@ int main(int argc,char **argv)
     float vrAzi[widthSet];
     float step = 0.2;
     float *histBuf = (float*)malloc(sizeof(float)*int((vrMax-vrMin)/step));
+    unsigned short *RDMAPALL = (unsigned short*)malloc(256*512*sizeof(char)*4);
     int vrInd = 0;
     float vrEst = 0;
     int cntFrameobj = 30;
@@ -176,17 +216,49 @@ int main(int argc,char **argv)
     long tmpTime = pointCloudBuf.pckHeader.sec;
     int cntPointCloud[2] = {0,0};
     FILE *fp_time = fopen("timeVal.txt","wt");
+    FILE *fp_terminal = fopen("terminal.txt","wt");
+    int stepRD = 0;
+    sensor_msgs::ImagePtr msg;
+
     while(ros::ok())
     {
         originPub.publish(origin);
-        ret = recvfrom(sockfd, recvBuf, 1440, 0, (struct sockaddr *)&from, &len);
-        if (ret > 0)
+        ret = recvfrom(sockfd, recvBuf, RECVSIZEMAX, 0, (struct sockaddr *)&from, &len);
+        // printf("ret = %d\n",ret);
+        if (ret >0)
 		{
-            
-            fwrite(recvBuf, 1, ret, fp);
+            if(ret == 1368)
+            {
+                memcpy(recvPoint,recvBuf,ret);
+                // fwrite(recvPoint, 1, ret, fp_point);
+            }
+            if(ret == 8240)
+            {
+                memcpy(recvRD,recvBuf,ret);
+                fwrite(recvRD, 1, ret, fp_RD);
+
+                fprintf(fp_terminal,"curObjInd = %d\t mode = %d\t frameId = %d\n",rdMapLine.pckHeader.curObjInd,rdMapLine.pckHeader.mode,rdMapLine.pckHeader.frameId);
+                fflush(fp_terminal);
+                if(rdMapLine.pckHeader.curObjInd == 0 && rdMapLine.pckHeader.mode == 0)
+                {
+                    img = buffer2img((unsigned short*)RDMAPALL,512,512);
+                    //ros::Rate loop_rate(5);
+                    msg = cv_bridge::CvImage(std_msgs::Header(), "mono16", img).toImageMsg();
+                    RDpub.publish(msg);
+                    memset(RDMAPALL,127,512*512*2);
+                }
+
+
+                for(int indRd = 0;indRd<16;indRd++)
+                {
+                    stepRD = rdMapLine.pckHeader.curObjInd*256*16*2+indRd*256*2+rdMapLine.pckHeader.mode*256;
+                    memcpy(RDMAPALL+stepRD,recvBuf+48+indRd*256*2,256*sizeof(short));
+                }
+                continue;
+            }
+
 
             // printf("pointCloudBuf.pckHeader.objectCount = %d \tpckHeader.curObjNum = %d\n",pointCloudBuf.pckHeader.curObjInd,pointCloudBuf.pckHeader.curObjNum);
- 
             // long tmpTime = pointCloudBuf.pckHeader.sec;
             // localtime_r(&tmpTime, &tm);
             // printf("%d_%d_%d_%d_%d_%d\n",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,pointCloudBuf.pckHeader.sec);
@@ -194,7 +266,7 @@ int main(int argc,char **argv)
             objectCnt = pointCloudBuf.pckHeader.objectCount;
             pointCloudBuf.pckHeader.curObjInd = pointCloudBuf.pckHeader.curObjInd*30;
             tmp = pointCloudBuf.pckHeader.frameId;
-            modeFlag = tmp%2;
+            modeFlag = 0;
             // if(pointCloudBuf.pckHeader.mode==1)
             // {
             //     continue;
@@ -231,26 +303,26 @@ int main(int argc,char **argv)
                     printf("-------------------------dataLoss %d\t%d\t%d pack(s) in %d packs------------------------\n",cntFrameobj,objectCntLast,(objectCntLast - cntFrameobj)/POINTNUM,objectCntLast/POINTNUM);
                 }
                 memset(histBuf,0,sizeof(float)*int((vrMax-vrMin)/step));
-                // printf("Frame %d: objectCnt is %d\n",frameId,objectCntLast);
+                printf("Frame %d: objectCnt is %d\n",frameId,objectCntLast);
                 vrEst = hist(vr,histBuf,step,vrInd);
-                printf("Frame %d: objectCnt is %d\n",frameId,cntFrameobj);
-                cntPointCloud[frameId%2] = cntFrameobj;
+                // printf("Frame %d: objectCnt is %d\n",frameId,cntFrameobj);
+                cntPointCloud[0] = cntFrameobj;
                 cntFrameobj = 0;
                 objectCntLast = objectCnt;
                 for(i = 0;i<vrInd;i++)
                 {
-                    cloud.points[i+widthSet*(frameId%2)].v = cloud.points[i+widthSet*(frameId%2)].h - vrEst*cos(vrAzi[i]);
-                    if(cloud.points[i+widthSet*(frameId%2)].v<-errThr)
+                    cloud.points[i+widthSet*(frameId%2)*0].v = cloud.points[i+widthSet*(frameId%2)*0].h - vrEst*cos(vrAzi[i]);
+                    if(cloud.points[i+widthSet*(frameId%2)*0].v<-errThr)
                     {
-                        cloud.points[i+widthSet*(frameId%2)].v = -1;
-                    }else if(cloud.points[i+widthSet*(frameId%2)].v>errThr)
+                        cloud.points[i+widthSet*(frameId%2)*0].v = -1;
+                    }else if(cloud.points[i+widthSet*(frameId%2)*0].v>errThr)
                     {
-                        cloud.points[i+widthSet*(frameId%2)].v = 1;
+                        cloud.points[i+widthSet*(frameId%2)*0].v = 1;
                     }else{
-                        cloud.points[i+widthSet*(frameId%2)].v = 0;
+                        cloud.points[i+widthSet*(frameId%2)*0].v = 0;
                     }
                 }
-                if(modeFlag==1||tmp - frameId==2)
+                if(modeFlag==0)
                 {
 
                     ros::Duration(0.005).sleep();
@@ -259,7 +331,7 @@ int main(int argc,char **argv)
                     marker.header.frame_id="altosRadar";
                     marker.header.stamp = ros::Time::now();
                     ostringstream str;
-                    str<<"pointNum:"<<cntPointCloud[0]+cntPointCloud[1];
+                    str<<"pointNum:"<<cntPointCloud[0];
                     marker.text=str.str();
                     marker.pose=pose;
                     markerPub.publish(marker);
@@ -305,12 +377,17 @@ int main(int argc,char **argv)
             }
 		}else
         {
-            printf("recv failed (timeOut)   %d\n",ret);
+           fprintf(fp_terminal,"recv failed (timeOut)   %d\n",ret);
         }
     }
     close(sockfd);
     free(histBuf);
-    fclose(fp);
+    free(recvBuf);
+    free(RDMAPALL);
+    fclose(fp_point);
+    fclose(fp_RD);
     fclose(fp_time);
+    fclose(fp_terminal);
+    
     return 0;
 }

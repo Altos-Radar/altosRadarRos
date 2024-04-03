@@ -1,3 +1,7 @@
 {
-    "cmake.sourceDirectory": "/home/xiaoboli/work/github-public/altosRadarRos/src/altosradar"
+    "cmake.sourceDirectory": "/home/xiaoboli/work/github-public/altosRadarRos/src/altosradar",
+    "files.associations": {
+        "array": "cpp",
+        "string_view": "cpp"
+    }
 }

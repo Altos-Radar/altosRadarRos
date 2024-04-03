@@ -55,5 +55,13 @@ typedef struct POINTCLOUD
 	SYSINFO sysInfo;
 	DETECTION point[POINTNUM];
 }POINTCLOUD;
+
+typedef struct RDMAP
+{
+	PCKHEADER pckHeader;
+	SYSINFO sysInfo;
+	unsigned short RDLine[4096];
+}RDMAP;
+
 #pragma pack(pop)
 

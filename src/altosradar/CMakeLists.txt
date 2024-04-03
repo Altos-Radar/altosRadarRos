@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(altosradar)
-
+set(OpenCV_DIR /usr/lib/x86_64-linux-gnu/cmake/opencv4/)  #填你自己的路径
 find_package(catkin REQUIRED COMPONENTS
-  message_generation pcl_ros roscpp rospy sensor_msgs std_msgs)
+  message_generation pcl_ros roscpp rospy sensor_msgs std_msgs OpenCV cv_bridge image_transport)
 
 generate_messages(DEPENDENCIES
   std_msgs
