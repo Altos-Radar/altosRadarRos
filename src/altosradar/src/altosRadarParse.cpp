@@ -208,6 +208,8 @@ int main(int argc,char **argv)
     float step = 0.2;
     float *histBuf = (float*)malloc(sizeof(float)*int((vrMax-vrMin)/step));
     unsigned short *RDMAPALL = (unsigned short*)malloc(256*512*sizeof(char)*4);
+    float RDValue = 0;
+    char *rdValueByte =(char*) &RDValue;
     int vrInd = 0;
     float vrEst = 0;
     int cntFrameobj = 30;
@@ -219,7 +221,8 @@ int main(int argc,char **argv)
     FILE *fp_terminal = fopen("terminal.txt","wt");
     int stepRD = 0;
     sensor_msgs::ImagePtr msg;
-
+    int indRd = 0;
+    float stepRd = 65535/160;
     while(ros::ok())
     {
         originPub.publish(origin);
@@ -248,12 +251,20 @@ int main(int argc,char **argv)
                     memset(RDMAPALL,127,512*512*2);
                 }
 
-
-                for(int indRd = 0;indRd<16;indRd++)
+                for(i = 0;i<16*256;i++)
                 {
-                    stepRD = rdMapLine.pckHeader.curObjInd*256*16*2+indRd*256*2+rdMapLine.pckHeader.mode*256;
-                    memcpy(RDMAPALL+stepRD,recvBuf+48+indRd*256*2,256*sizeof(short));
+                    indRd = i/256;
+                    stepRD = rdMapLine.pckHeader.curObjInd*256*16*2+indRd*256*2+rdMapLine.pckHeader.mode*256 + i%256;
+                    memcpy(rdValueByte+2,recvBuf+48+i*2,sizeof(short));
+                    RDMAPALL[stepRD] = (10*log10(RDValue) - 30)*stepRd;
                 }
+
+
+                // for(int indRd = 0;indRd<16;indRd++)
+                // {
+                //     stepRD = rdMapLine.pckHeader.curObjInd*256*16*2+indRd*256*2+rdMapLine.pckHeader.mode*256;
+                //     memcpy(RDMAPALL+stepRD,recvBuf+48+indRd*256*2,256*sizeof(short));
+                // }
                 continue;
             }
 
