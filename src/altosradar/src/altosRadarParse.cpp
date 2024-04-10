@@ -18,7 +18,7 @@
 #include <algorithm>
 #include<iostream>
 using namespace std;
-#define widthSet 4220
+#define widthSet 16000
 #define PORT 4040
 #define vrMax 60
 #define vrMin -60
@@ -190,6 +190,7 @@ int main(int argc,char **argv)
             // long tmpTime = pointCloudBuf.pckHeader.sec;
             // localtime_r(&tmpTime, &tm);
             // printf("%d_%d_%d_%d_%d_%d\n",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,pointCloudBuf.pckHeader.sec);
+            // printf("%f\n",pointCloudBuf.pckHeader.sec+pointCloudBuf.pckHeader.nsec/1e9);
             pointCloudBuf.pckHeader.curObjNum = pointCloudBuf.pckHeader.curObjNum/44;
             objectCnt = pointCloudBuf.pckHeader.objectCount;
             pointCloudBuf.pckHeader.curObjInd = pointCloudBuf.pckHeader.curObjInd*30;
