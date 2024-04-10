@@ -55,7 +55,7 @@ int main(int argc,char **argv)
 {
     float *rcsBuf = (float*)malloc(1201*sizeof(float));
     FILE *fp_rcs = fopen("data//rcs.dat","rb");
-    fread(rcsBuf,1021,sizeof(float),fp_rcs);
+    fread(rcsBuf,1201,sizeof(float),fp_rcs);
     fclose(fp_rcs);
 
     ros::init(argc, argv, "altosRadar");
