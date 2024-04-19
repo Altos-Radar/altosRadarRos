@@ -18,7 +18,7 @@
 #include <algorithm>
 #include<iostream>
 using namespace std;
-#define widthSet 16000
+#define widthSet 8000
 #define PORT 4040
 #define vrMax 60
 #define vrMin -60

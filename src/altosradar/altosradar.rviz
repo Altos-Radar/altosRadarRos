@@ -76,7 +76,7 @@ Visualization Manager:
         Min Value: -10
         Value: true
       Axis: Z
-      Channel Name: v
+      Channel Name: z
       Class: rviz/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
@@ -95,7 +95,7 @@ Visualization Manager:
       Size (m): 0.009999999776482582
       Style: Points
       Topic: /altosRadar
-      Unreliable: true
+      Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -166,20 +166,26 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: -1.5707999467849731
-      Class: rviz/TopDownOrtho
+      Class: rviz/ThirdPersonFollower
+      Distance: 3.701063632965088
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
+      Field of View: 0.7853981852531433
+      Focal Point:
+        X: 1.3556511402130127
+        Y: -0.3407447934150696
+        Z: 2.1457672119140625e-06
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 2.4657766819000244
+      Pitch: 1.1647965908050537
       Target Frame: <Fixed Frame>
-      X: 173.3431396484375
-      Y: -18.807876586914062
+      Yaw: 2.9004037380218506
     Saved:
       - Angle: -1.5707999467849731
         Class: rviz/TopDownOrtho
@@ -233,5 +239,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1920
-  X: 1920
-  Y: 0
+  X: 3153
+  Y: 283
