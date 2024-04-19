@@ -17,6 +17,7 @@
 #include <sys/time.h>
 #include <algorithm>
 #include<iostream>
+#include<vector>
 using namespace std;
 #define widthSet 8000
 #define PORT 4040
@@ -24,33 +25,88 @@ using namespace std;
 #define vrMin -60
 #define errThr 3
 #define PI 3.1415926
-float hist(float *vr,float *histBuf,float step,int vrInd)
-{
-    int ind = 0;
-    for(int i = 0;i<vrInd;i++)
-    {
-        ind = (vr[i] - vrMin)/step;
-        // printf("ind = %d\n",i);
-
-        if(vr[i]>60||vr[i]<-60||isnan(vr[i]))
-        {
-            // printf("vr[%d] = %f\n",ind,vr[i]);
-            continue;
-        }
-        if(vr[i]<=0  && vr[i]>-40)
-        {
-
-            histBuf[ind]++;
-        }
-    }
-    return float((max_element(histBuf,histBuf+(int((vrMax-vrMin)/step))) - histBuf))*step+vrMin;
-}
 float rcsCal(float range,float azi,float snr,float *rcsBuf)
 {
     int ind = (azi*180/PI+60.1)*10;
     float rcs = powf32(range,2.6)*snr/5.0e6/rcsBuf[ind];
     return rcs;
 }
+
+float hist(vector<POINTCLOUD> pointCloudVec,float *histBuf,float step)
+{
+    int ind = 0;
+
+    float vr = 0;
+
+    for(int i = 0;i<pointCloudVec.size()*30;i++)
+    {
+        for(int j = 0;j<30;j++)
+        {
+            if(abs(pointCloudVec[i].point[j].range)>0)
+            {
+                vr = pointCloudVec[i].point[j].doppler/cos(pointCloudVec[i].point[j].azi);
+                ind = (vr - vrMin)/step;
+                if(vr>60||vr<-60||isnan(vr))
+                {
+                    continue;
+                }
+                if(vr<=0)
+                {
+                    histBuf[ind]++;
+                }
+            }
+        }
+    }
+    return float((max_element(histBuf,histBuf+(int((vrMax-vrMin)/step))) - histBuf))*step+vrMin;
+}
+
+
+void calPoint(vector<POINTCLOUD> pointCloudVec,pcl::PointCloud<pcl::PointXYZHSV> &cloud,int installFlag,float *rcsBuf,float step,float *histBuf)
+{
+    for(int i = 0;i<pointCloudVec.size()*30;i++)
+    {
+        for(int j = 0;j<30;j++)
+        {
+            if(abs(pointCloudVec[i].point[j].range)>0)
+            {
+                pointCloudVec[i].point[j].ele = installFlag*(pointCloudVec[i].point[j].ele);
+                pointCloudVec[i].point[j].azi = -installFlag*asin(sin(pointCloudVec[i].point[j].azi)/cos(pointCloudVec[i].point[j].ele));
+                cloud.points[i*30+j].x = (pointCloudVec[i].point[j].range)*cos(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele); 
+                cloud.points[i*30+j].y = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);; 
+                cloud.points[i*30+j].z = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].ele) ; 
+                cloud.points[i*30+j].h = pointCloudVec[i].point[j].doppler; 
+                cloud.points[i*30+j].s = rcsCal(pointCloudVec[i].point[j].range,pointCloudVec[i].point[j].azi,pointCloudVec[i].point[j].snr,rcsBuf);
+            }
+        }
+    }
+    memset(histBuf,0,sizeof(float)*int((vrMax-vrMin)/step));
+    float vrEst = hist(pointCloudVec,histBuf,step);
+    float tmp;
+    for(int i = 0;i<pointCloudVec.size()*30;i++)
+    {
+        for(int j = 0;j<30;j++)
+        {
+            if(abs(pointCloudVec[i].point[j].range)>0)
+            {
+                tmp = cloud.points[i*30+j].h - vrEst*cos(pointCloudVec[i].point[j].azi);
+                if(tmp<-errThr)
+                {
+                    cloud.points[i*30+j].v = -1;
+                }else if(tmp>errThr)
+                {
+                    cloud.points[i*30+j].v = 1;
+                }else
+                {
+                    cloud.points[i*30+j].v = 0;
+                }
+            }
+        }
+    }
+
+}
+
+
+
 int main(int argc,char **argv)
 {
     float *rcsBuf = (float*)malloc(1201*sizeof(float));
@@ -103,7 +159,6 @@ int main(int argc,char **argv)
 
     sensor_msgs::PointCloud2 output; 
     pcl::PointCloud<pcl::PointXYZHSV> cloud; 
-    printf("---------------------------\n");
     cloud.width = widthSet*2; 
     cloud.height = 1; 
     cloud.points.resize(cloud.width * cloud.height);
@@ -146,172 +201,84 @@ int main(int argc,char **argv)
     
     int recvFrameLen = 0;
 	int frameNum = 0;
-    int tmp;
+    int installFlag = -1;
+    float step = 0.2;
+    vector<POINTCLOUD> pointCloudVec;
     POINTCLOUD pointCloudBuf;
 	char* recvBuf= (char*)&pointCloudBuf;
+    float *histBuf = (float*)malloc(sizeof(float)*int((vrMax-vrMin)/step));
+    unsigned short curObjInd;
     struct timeval  tv;
 	struct tm tm;
-
+    int frameId[2] = {0,0};
+    int cntPointCloud[2] = {0,0};
     gettimeofday(&tv, NULL);
     localtime_r(&tv.tv_sec, &tm);
     char filePath[1024];
+    float vrEst = 0;
+    unsigned char mode;
     sprintf(filePath,"data//%d_%d_%d_%d_%d_%d_altos.dat",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec);
     FILE *fp = fopen(filePath,"wb");
-    int frameId = 0;
-    int objectCntFrame = 0;
-    int i;
-    int objectCntLast,objectCnt;
-    float offsetRange = 0;
-    float offsetAzi = 0.0*3.1415926/180;
-    float offsetEle = -0.0*3.1415926/180;
-    float vr[widthSet];
-    float vrAzi[widthSet];
-    float step = 0.2;
-    float *histBuf = (float*)malloc(sizeof(float)*int((vrMax-vrMin)/step));
-    int vrInd = 0;
-    float vrEst = 0;
-    int cntFrameobj = 30;
-    int installFlag = -1;
-    unsigned char modeFlag = 0;
-    long tmpTime = pointCloudBuf.pckHeader.sec;
-    int cntPointCloud[2] = {0,0};
-    FILE *fp_time = fopen("timeVal.txt","wt");
+    bool sendFlag = 0; 
+    float tmp;
     while(ros::ok())
     {
-        originPub.publish(origin);
+
         ret = recvfrom(sockfd, recvBuf, 1440, 0, (struct sockaddr *)&from, &len);
+        printf("---------------------------%d\n",ret);
+
+
         if (ret > 0)
 		{
-            
-            fwrite(recvBuf, 1, ret, fp);
-
-            // printf("pointCloudBuf.pckHeader.objectCount = %d \tpckHeader.curObjNum = %d\n",pointCloudBuf.pckHeader.curObjInd,pointCloudBuf.pckHeader.curObjNum);
- 
-            // long tmpTime = pointCloudBuf.pckHeader.sec;
-            // localtime_r(&tmpTime, &tm);
-            // printf("%d_%d_%d_%d_%d_%d\n",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,pointCloudBuf.pckHeader.sec);
-            // printf("%f\n",pointCloudBuf.pckHeader.sec+pointCloudBuf.pckHeader.nsec/1e9);
-            pointCloudBuf.pckHeader.curObjNum = pointCloudBuf.pckHeader.curObjNum/44;
-            objectCnt = pointCloudBuf.pckHeader.objectCount;
-            pointCloudBuf.pckHeader.curObjInd = pointCloudBuf.pckHeader.curObjInd*30;
-            tmp = pointCloudBuf.pckHeader.frameId;
-            modeFlag = tmp%2;
-            // if(pointCloudBuf.pckHeader.mode==1)
-            // {
-            //     continue;
-            // }
-            if(frameId == 0 || frameId == tmp)
+            printf("%d\n",ret);
+            cloud.points.resize(pointCloudVec.size()*30);
+            if((pointCloudBuf.pckHeader.mode == 0&&cntPointCloud[1]>0))
             {
-                frameId = tmp;
-                for(i = 0;i<pointCloudBuf.pckHeader.curObjNum;i=i+1)
-                {
-                    if(abs(pointCloudBuf.point[i].range)>0)
-                    {
-                        pointCloudBuf.point[i].ele = installFlag*(pointCloudBuf.point[i].ele -offsetEle);
-                        pointCloudBuf.point[i].azi = -installFlag*asin(sin(pointCloudBuf.point[i].azi)/cos(pointCloudBuf.point[i].ele));
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].x = (pointCloudBuf.point[i].range-offsetRange)*cos(pointCloudBuf.point[i].azi-offsetAzi)*cos(pointCloudBuf.point[i].ele); 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].y = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].azi-offsetAzi)*cos(pointCloudBuf.point[i].ele);; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].z = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].ele) ; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].h = pointCloudBuf.point[i].doppler; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].s = rcsCal(pointCloudBuf.point[i].range,pointCloudBuf.point[i].azi,pointCloudBuf.point[i].snr,rcsBuf);
-                        vr[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].doppler/cos(pointCloudBuf.point[i].azi-offsetAzi);
-                        // printf("ind =%d\t %f\n",pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag,cos(pointCloudBuf.point[i].azi-offsetAzi));
-
-                        vrAzi[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].azi;
-                        cntFrameobj++;
-                    }
-                }
-                vrInd = pointCloudBuf.pckHeader.curObjInd + POINTNUM;
-                objectCntFrame = pointCloudBuf.pckHeader.curObjInd + POINTNUM;
-                objectCntLast = objectCnt;
-                // cntFrameobj = cntFrameobj + 30;
-
-            }else{
-                if(objectCntLast - cntFrameobj>POINTNUM)
-                {
-                    printf("-------------------------dataLoss %d\t%d\t%d pack(s) in %d packs------------------------\n",cntFrameobj,objectCntLast,(objectCntLast - cntFrameobj)/POINTNUM,objectCntLast/POINTNUM);
-                }
-                memset(histBuf,0,sizeof(float)*int((vrMax-vrMin)/step));
-                // printf("Frame %d: objectCnt is %d\n",frameId,objectCntLast);
-                vrEst = hist(vr,histBuf,step,vrInd);
-                printf("Frame %d: objectCnt is %d\n",frameId,cntFrameobj);
-                cntPointCloud[frameId%2] = cntFrameobj;
-                cntFrameobj = 0;
-                objectCntLast = objectCnt;
-                for(i = 0;i<vrInd;i++)
-                {
-                    cloud.points[i+widthSet*(frameId%2)].v = cloud.points[i+widthSet*(frameId%2)].h - vrEst*cos(vrAzi[i]);
-                    if(cloud.points[i+widthSet*(frameId%2)].v<-errThr)
-                    {
-                        cloud.points[i+widthSet*(frameId%2)].v = -1;
-                    }else if(cloud.points[i+widthSet*(frameId%2)].v>errThr)
-                    {
-                        cloud.points[i+widthSet*(frameId%2)].v = 1;
-                    }else{
-                        cloud.points[i+widthSet*(frameId%2)].v = 0;
-                    }
-                }
-                if(modeFlag==1||tmp - frameId==2)
-                {
-
-                    ros::Duration(0.005).sleep();
-                    pcl::toROSMsg(cloud, output); 
-                    output.header.frame_id = "altosRadar"; 
-                    marker.header.frame_id="altosRadar";
-                    marker.header.stamp = ros::Time::now();
-                    ostringstream str;
-                    str<<"pointNum:"<<cntPointCloud[0]+cntPointCloud[1];
-                    marker.text=str.str();
-                    marker.pose=pose;
-                    markerPub.publish(marker);
-                    output.header.stamp = ros::Time::now();; 
-                    pub.publish(output);
-                    for(int i = 0;i<widthSet*2;i++)
-                    {
-                        cloud.points[i].x = 0;
-                        cloud.points[i].y = 0;
-                        cloud.points[i].z = 0;
-                        cloud.points[i].h = 0;
-                        cloud.points[i].s = 0;
-                        cloud.points[i].v = 0;
-                    }
-                    struct timeval tv;
-
-                    long long t1;
-
-                    gettimeofday(&tv, NULL);
-
-                    t1 = tv.tv_sec * 1000ll + tv.tv_usec / 1000;
-                    localtime_r(&tmpTime, &tm);
-                    fprintf(fp_time,"%f\n",t1/1e3);
-                }
-                frameId = tmp;
-                for(int i = 0;i<pointCloudBuf.pckHeader.curObjNum;i++)
-                {
-                    if(abs(pointCloudBuf.point[i].range)>0)
-                    {
-                        pointCloudBuf.point[i].ele = installFlag*(pointCloudBuf.point[i].ele -offsetEle);
-                        pointCloudBuf.point[i].azi = -installFlag*asin(sin(pointCloudBuf.point[i].azi)/cos(pointCloudBuf.point[i].ele));
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].x = (pointCloudBuf.point[i].range-offsetRange)*cos(pointCloudBuf.point[i].azi-offsetAzi); 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].y = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].azi-offsetAzi);;
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].z = (pointCloudBuf.point[i].range-offsetRange)*sin(pointCloudBuf.point[i].ele) ; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].h = pointCloudBuf.point[i].doppler; 
-                        cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].s = rcsCal(pointCloudBuf.point[i].range,pointCloudBuf.point[i].azi,pointCloudBuf.point[i].snr,rcsBuf);
-                        vr[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].doppler/cos(pointCloudBuf.point[i].azi-offsetAzi);
-                        vrAzi[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].azi;    
-                        cntFrameobj++;
-                    }
-                }
-                vrInd = pointCloudBuf.pckHeader.curObjInd + POINTNUM;
+                cntPointCloud[1] = 0;
+                calPoint(pointCloudVec,cloud,installFlag,rcsBuf,step,histBuf);
+                ros::Duration(0.005).sleep();
+                pcl::toROSMsg(cloud, output); 
+                output.header.frame_id = "altosRadar"; 
+                marker.header.frame_id="altosRadar";
+                marker.header.stamp = ros::Time::now();
+                ostringstream str;
+                str<<"pointNum:"<<cntPointCloud[0]+cntPointCloud[1];
+                marker.text=str.str();
+                marker.pose=pose;
+                markerPub.publish(marker);
+                output.header.stamp = ros::Time::now();; 
+                pub.publish(output);
+                pointCloudVec.clear();
             }
-		}else
-        {
-            printf("recv failed (timeOut)   %d\n",ret);
+            fwrite(recvBuf, 1, ret, fp);
+            curObjInd = pointCloudBuf.pckHeader.curObjInd;
+            mode = pointCloudBuf.pckHeader.mode ;
+            cntPointCloud[mode] = pointCloudBuf.pckHeader.objectCount;
+            pointCloudVec.push_back(pointCloudBuf);
+            if((mode == 1 && (curObjInd+1)*30>=pointCloudBuf.pckHeader.objectCount))
+            {
+                cntPointCloud[1] = 0;
+                calPoint(pointCloudVec,cloud,installFlag,rcsBuf,step,histBuf);
+                ros::Duration(0.005).sleep();
+                pcl::toROSMsg(cloud, output); 
+                output.header.frame_id = "altosRadar"; 
+                marker.header.frame_id="altosRadar";
+                marker.header.stamp = ros::Time::now();
+                ostringstream str;
+                str<<"pointNum:"<<cntPointCloud[0]+cntPointCloud[1];
+                marker.text=str.str();
+                marker.pose=pose;
+                markerPub.publish(marker);
+                output.header.stamp = ros::Time::now();; 
+                pub.publish(output);
+                pointCloudVec.clear();
+            }
         }
     }
-    close(sockfd);
+
+	close(sockfd);
     free(histBuf);
     fclose(fp);
-    fclose(fp_time);
+    // fclose(fp_time);
     return 0;
 }
