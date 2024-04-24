@@ -38,7 +38,7 @@ float hist(vector<POINTCLOUD> pointCloudVec,float *histBuf,float step)
 
     float vr = 0;
 
-    for(int i = 0;i<pointCloudVec.size()*30;i++)
+    for(int i = 0;i<pointCloudVec.size();i++)
     {
         for(int j = 0;j<30;j++)
         {
@@ -63,7 +63,8 @@ float hist(vector<POINTCLOUD> pointCloudVec,float *histBuf,float step)
 
 void calPoint(vector<POINTCLOUD> pointCloudVec,pcl::PointCloud<pcl::PointXYZHSV> &cloud,int installFlag,float *rcsBuf,float step,float *histBuf)
 {
-    for(int i = 0;i<pointCloudVec.size()*30;i++)
+
+    for(int i = 0;i<pointCloudVec.size();i++)
     {
         for(int j = 0;j<30;j++)
         {
@@ -82,7 +83,7 @@ void calPoint(vector<POINTCLOUD> pointCloudVec,pcl::PointCloud<pcl::PointXYZHSV>
     memset(histBuf,0,sizeof(float)*int((vrMax-vrMin)/step));
     float vrEst = hist(pointCloudVec,histBuf,step);
     float tmp;
-    for(int i = 0;i<pointCloudVec.size()*30;i++)
+    for(int i = 0;i<pointCloudVec.size();i++)
     {
         for(int j = 0;j<30;j++)
         {
@@ -220,21 +221,30 @@ int main(int argc,char **argv)
     sprintf(filePath,"data//%d_%d_%d_%d_%d_%d_altos.dat",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec);
     FILE *fp = fopen(filePath,"wb");
     bool sendFlag = 0; 
-    float tmp;
+    long tmpTime = pointCloudBuf.pckHeader.sec;
+    FILE *fp_time = fopen("timeVal.txt","wt");
     while(ros::ok())
     {
-
         ret = recvfrom(sockfd, recvBuf, 1440, 0, (struct sockaddr *)&from, &len);
-        printf("---------------------------%d\n",ret);
-
-
         if (ret > 0)
 		{
-            printf("%d\n",ret);
-            cloud.points.resize(pointCloudVec.size()*30);
             if((pointCloudBuf.pckHeader.mode == 0&&cntPointCloud[1]>0))
             {
-                cntPointCloud[1] = 0;
+                if(pointCloudVec.size()*30<cntPointCloud[0]+cntPointCloud[1])
+                {
+                    printf("FrameId %d Loss %d pack(s) in %d packs------------------------\n",pointCloudBuf.pckHeader.frameId,
+                    int(ceil(cntPointCloud[0]/30)+ceil(cntPointCloud[1]/30))-pointCloudVec.size(),int(ceil(cntPointCloud[0]/30)+ceil(cntPointCloud[1]/30)));
+                }
+                // cloud.width = pointCloudVec.size()*30; 
+                // cloud.points.resize(cloud.width*cloud.height);
+                for(int k = 0;k<widthSet*2;k++)
+                {
+                    cloud.points[k].x = 0;//(pointCloudVec[i].point[j].range)*cos(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele); 
+                    cloud.points[k].y = 0;//(pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);; 
+                    cloud.points[k].z = 0;//(pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);; 
+                    cloud.points[k].h = 0;//pointCloudVec[i].point[j].doppler; 
+                    cloud.points[k].s = 0;//rcsCal(pointCloudVec[i].point[j].range,pointCloudVec[i].point[j].azi,pointCloudVec[i].point[j].snr,rcsBuf);
+                }
                 calPoint(pointCloudVec,cloud,installFlag,rcsBuf,step,histBuf);
                 ros::Duration(0.005).sleep();
                 pcl::toROSMsg(cloud, output); 
@@ -249,6 +259,14 @@ int main(int argc,char **argv)
                 output.header.stamp = ros::Time::now();; 
                 pub.publish(output);
                 pointCloudVec.clear();
+                cntPointCloud[0] = 0;
+                cntPointCloud[1] = 0;
+                struct timeval tv;
+                long long t1;
+                gettimeofday(&tv, NULL);
+                t1 = tv.tv_sec * 1000ll + tv.tv_usec / 1000;
+                localtime_r(&tmpTime, &tm);
+                fprintf(fp_time,"1:%f\n",t1/1e3);
             }
             fwrite(recvBuf, 1, ret, fp);
             curObjInd = pointCloudBuf.pckHeader.curObjInd;
@@ -257,7 +275,21 @@ int main(int argc,char **argv)
             pointCloudVec.push_back(pointCloudBuf);
             if((mode == 1 && (curObjInd+1)*30>=pointCloudBuf.pckHeader.objectCount))
             {
-                cntPointCloud[1] = 0;
+                if(pointCloudVec.size()*30<cntPointCloud[0]+cntPointCloud[1])
+                {
+                    printf("FrameId %d %d Loss %d pack(s) in %d packs------------------------\n",pointCloudBuf.pckHeader.frameId,pointCloudVec.size(),
+                    int(ceil(cntPointCloud[0]/30)+ceil(cntPointCloud[1]/30))-pointCloudVec.size(),int(ceil(cntPointCloud[0]/30)+ceil(cntPointCloud[1]/30)));
+                }
+                // cloud.width = pointCloudVec.size()*30; 
+                // cloud.points.resize(cloud.width*cloud.height);
+                for(int k = 0;k<widthSet*2;k++)
+                {
+                    cloud.points[k].x = 0;//(pointCloudVec[i].point[j].range)*cos(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele); 
+                    cloud.points[k].y = 0;//(pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);; 
+                    cloud.points[k].z = 0;//(pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);; 
+                    cloud.points[k].h = 0;//pointCloudVec[i].point[j].doppler; 
+                    cloud.points[k].s = 0;//rcsCal(pointCloudVec[i].point[j].range,pointCloudVec[i].point[j].azi,pointCloudVec[i].point[j].snr,rcsBuf);
+                }
                 calPoint(pointCloudVec,cloud,installFlag,rcsBuf,step,histBuf);
                 ros::Duration(0.005).sleep();
                 pcl::toROSMsg(cloud, output); 
@@ -266,12 +298,23 @@ int main(int argc,char **argv)
                 marker.header.stamp = ros::Time::now();
                 ostringstream str;
                 str<<"pointNum:"<<cntPointCloud[0]+cntPointCloud[1];
+                printf("pointNum of %d frame: %d\n",pointCloudBuf.pckHeader.frameId,cntPointCloud[0]+cntPointCloud[1]);
                 marker.text=str.str();
                 marker.pose=pose;
                 markerPub.publish(marker);
                 output.header.stamp = ros::Time::now();; 
                 pub.publish(output);
                 pointCloudVec.clear();
+                cntPointCloud[0] = 0;
+                cntPointCloud[1] = 0;
+                struct timeval tv;
+                long long t1;
+                gettimeofday(&tv, NULL);
+                t1 = tv.tv_sec * 1000ll + tv.tv_usec / 1000;
+                localtime_r(&tmpTime, &tm);
+                fprintf(fp_time,"2:%f\n",t1/1e3);
+                // cloud.clear();
+
             }
         }
     }
@@ -279,6 +322,6 @@ int main(int argc,char **argv)
 	close(sockfd);
     free(histBuf);
     fclose(fp);
-    // fclose(fp_time);
+    fclose(fp_time);
     return 0;
 }
