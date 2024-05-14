@@ -230,7 +230,7 @@ int main(int argc,char **argv)
         // printf("ret = %d\n",ret);
         if (ret >0)
 		{
-            if(ret == 1368)
+            if(ret <= 1368)
             {
                 memcpy(recvPoint,recvBuf,ret);
                 // fwrite(recvPoint, 1, ret, fp_point);
@@ -268,14 +268,13 @@ int main(int argc,char **argv)
                 continue;
             }
 
-
-            // printf("pointCloudBuf.pckHeader.objectCount = %d \tpckHeader.curObjNum = %d\n",pointCloudBuf.pckHeader.curObjInd,pointCloudBuf.pckHeader.curObjNum);
+            // printf("%d\tpointCloudBuf.pckHeader.objectCount = %d \tpckHeader.curObjNum = %d\n",pointCloudBuf.pckHeader.frameId,pointCloudBuf.pckHeader.curObjInd,pointCloudBuf.pckHeader.curObjNum/44);
             // long tmpTime = pointCloudBuf.pckHeader.sec;
             // localtime_r(&tmpTime, &tm);
             // printf("%d_%d_%d_%d_%d_%d\n",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,pointCloudBuf.pckHeader.sec);
             pointCloudBuf.pckHeader.curObjNum = pointCloudBuf.pckHeader.curObjNum/44;
             objectCnt = pointCloudBuf.pckHeader.objectCount;
-            pointCloudBuf.pckHeader.curObjInd = pointCloudBuf.pckHeader.curObjInd*30;
+            // pointCloudBuf.pckHeader.curObjInd = pointCloudBuf.pckHeader.curObjInd*30;
             tmp = pointCloudBuf.pckHeader.frameId;
             modeFlag = 0;
             // if(pointCloudBuf.pckHeader.mode==1)
@@ -297,7 +296,6 @@ int main(int argc,char **argv)
                         cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].h = pointCloudBuf.point[i].doppler; 
                         cloud.points[pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag].s = rcsCal(pointCloudBuf.point[i].range,pointCloudBuf.point[i].azi,pointCloudBuf.point[i].snr,rcsBuf);
                         vr[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].doppler/cos(pointCloudBuf.point[i].azi-offsetAzi);
-                        // printf("ind =%d\t %f\n",pointCloudBuf.pckHeader.curObjInd+i+widthSet*modeFlag,cos(pointCloudBuf.point[i].azi-offsetAzi));
 
                         vrAzi[pointCloudBuf.pckHeader.curObjInd+i] = pointCloudBuf.point[i].azi;
                         cntFrameobj++;
