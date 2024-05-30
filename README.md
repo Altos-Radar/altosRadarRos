@@ -1,5 +1,5 @@
 # altosRadarRos
-1. git clone git@github.com:Altos-Radar/altosRadarRos.git
+1. git clone https://github.com/Altos-Radar/altosRadarRos.git
 2. cd altosRadarRos
 3. catkin_make
 4. open terminal in altosRadarRos
@@ -15,7 +15,7 @@
    
    
 OR
-1. git clone git@github.com:Altos-Radar/altosRadarRos.git
+1. git clone https://github.com/Altos-Radar/altosRadarRos.git
 2. cd altosRadarRos
 3. catkin_make
 4. open terminal in altosRadarRos
