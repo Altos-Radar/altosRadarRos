@@ -5,6 +5,8 @@
         "string": "cpp",
         "vector": "cpp",
         "cmath": "cpp",
-        "*.tcc": "cpp"
+        "*.tcc": "cpp",
+        "unordered_map": "cpp",
+        "unordered_set": "cpp"
     }
 }

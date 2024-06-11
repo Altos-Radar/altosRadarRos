@@ -28,6 +28,10 @@ using namespace std;
 float rcsCal(float range,float azi,float snr,float *rcsBuf)
 {
     int ind = (azi*180/PI+60.1)*10;
+    if(ind>1201||ind<0)
+    {
+        ind = 601;
+    }
     float rcs = powf32(range,2.6)*snr/5.0e6/rcsBuf[ind];
     return rcs;
 }
@@ -71,7 +75,7 @@ void calPoint(vector<POINTCLOUD> pointCloudVec,pcl::PointCloud<pcl::PointXYZHSV>
             if(abs(pointCloudVec[i].point[j].range)>0)
             {
                 pointCloudVec[i].point[j].ele = installFlag*(pointCloudVec[i].point[j].ele);
-                pointCloudVec[i].point[j].azi = -installFlag*asin(sin(pointCloudVec[i].point[j].azi)/cos(pointCloudVec[i].point[j].ele));
+                pointCloudVec[i].point[j].azi = -installFlag*asin(sin(pointCloudVec[i].point[j].azi-2.2*PI/180)/cos(pointCloudVec[i].point[j].ele));
                 cloud.points[i*30+j].x = (pointCloudVec[i].point[j].range)*cos(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele); 
                 cloud.points[i*30+j].y = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);; 
                 cloud.points[i*30+j].z = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].ele) ; 
@@ -228,7 +232,8 @@ int main(int argc,char **argv)
         ret = recvfrom(sockfd, recvBuf, 1440, 0, (struct sockaddr *)&from, &len);
         if (ret > 0)
 		{
-            if((pointCloudBuf.pckHeader.mode == 0&&cntPointCloud[1]>0))
+            // printf("pointCloudBuf.pckHeader.objectCount = %d\n",pointCloudBuf.pckHeader.objectCount);
+            if((pointCloudBuf.pckHeader.mode == 1&&cntPointCloud[0]>0))
             {
                 if(pointCloudVec.size()*30<cntPointCloud[0]+cntPointCloud[1])
                 {
@@ -269,11 +274,11 @@ int main(int argc,char **argv)
                 fprintf(fp_time,"1:%f\n",t1/1e3);
             }
             fwrite(recvBuf, 1, ret, fp);
-            curObjInd = pointCloudBuf.pckHeader.curObjInd;
+            curObjInd = pointCloudBuf.pckHeader.curObjInd/30;
             mode = pointCloudBuf.pckHeader.mode ;
             cntPointCloud[mode] = pointCloudBuf.pckHeader.objectCount;
             pointCloudVec.push_back(pointCloudBuf);
-            if((mode == 1 && (curObjInd+1)*30>=pointCloudBuf.pckHeader.objectCount))
+            if((mode == 0 && (curObjInd+1)*30>=pointCloudBuf.pckHeader.objectCount))
             {
                 if(pointCloudVec.size()*30<cntPointCloud[0]+cntPointCloud[1])
                 {
