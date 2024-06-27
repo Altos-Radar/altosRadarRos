@@ -274,7 +274,7 @@ int main(int argc,char **argv)
             // printf("%d_%d_%d_%d_%d_%d\n",tm.tm_year + 1900,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,pointCloudBuf.pckHeader.sec);
             pointCloudBuf.pckHeader.curObjNum = pointCloudBuf.pckHeader.curObjNum/44;
             objectCnt = pointCloudBuf.pckHeader.objectCount;
-            // pointCloudBuf.pckHeader.curObjInd = pointCloudBuf.pckHeader.curObjInd*30;
+            pointCloudBuf.pckHeader.curObjInd = pointCloudBuf.pckHeader.curObjInd*30;
             tmp = pointCloudBuf.pckHeader.frameId;
             modeFlag = 0;
             // if(pointCloudBuf.pckHeader.mode==1)
