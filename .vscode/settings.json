@@ -1,0 +1,10 @@
+{
+    "cmake.sourceDirectory": "/home/xiaoboli/work/github-public/altosRadarRos/src/altosradar",
+    "files.associations": {
+        "deque": "cpp",
+        "string": "cpp",
+        "vector": "cpp",
+        "cmath": "cpp",
+        "*.tcc": "cpp"
+    }
+}
