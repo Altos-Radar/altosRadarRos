@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
                 if (pointCloudVec.size() * 30 <
                     cntPointCloud[0] + cntPointCloud[1]) {
                     printf(
-                        "FrameId %d Loss %d pack(s) in %d "
+                        "FrameId %d Loss %ld pack(s) in %d "
                         "packs------------------------\n",
                         pointCloudBuf.pckHeader.frameId,
                         int(ceil(cntPointCloud[0] / 30) +
@@ -296,7 +296,7 @@ int main(int argc, char** argv) {
                 if (pointCloudVec.size() * 30 <
                     cntPointCloud[0] + cntPointCloud[1]) {
                     printf(
-                        "FrameId %d %d Loss %d pack(s) in %d "
+                        "FrameId %d %ld Loss %ld pack(s) in %d "
                         "packs------------------------\n",
                         pointCloudBuf.pckHeader.frameId, pointCloudVec.size(),
                         int(ceil(cntPointCloud[0] / 30) +
