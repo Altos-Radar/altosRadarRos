@@ -221,7 +221,7 @@ int main(int argc, char** argv) {
     while(ros::ok())
     {
         memset(recvBuf,0,sizeof(POINTCLOUD));
-        ret = recvfrom(sockfd, recvBuf, 1440, 0, (struct sockaddr *)&from, &len);
+        ret = recvfrom(sockfd, recvBuf, sizeof(POINTCLOUD), 0, (struct sockaddr *)&from, &len);
         if (ret > 0)
 		{
             if((pointCloudBuf.pckHeader.mode == 0&&cntPointCloud[1]>0))
