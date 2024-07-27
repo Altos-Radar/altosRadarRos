@@ -60,6 +60,22 @@ float hist(vector<POINTCLOUD> pointCloudVec, float* histBuf, float step) {
 }
 
 
+void calPoint(vector<POINTCLOUD> pointCloudVec,pcl::PointCloud<pcl::PointXYZHSV> &cloud,int installFlag,float *rcsBuf,float step,float *histBuf)
+{
+
+    for(int i = 0;i<pointCloudVec.size();i++)
+    {
+        for(int j = 0;j<30;j++)
+        {
+            if(abs(pointCloudVec[i].point[j].range)>0)
+            {
+                pointCloudVec[i].point[j].ele = installFlag*(pointCloudVec[i].point[j].ele);
+                pointCloudVec[i].point[j].azi = -installFlag*asin(sin(pointCloudVec[i].point[j].azi-0*PI/180)/cos(pointCloudVec[i].point[j].ele));
+                cloud.points[i*30+j].x = (pointCloudVec[i].point[j].range)*cos(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele); 
+                cloud.points[i*30+j].y = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);; 
+                cloud.points[i*30+j].z = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].ele) ; 
+                cloud.points[i*30+j].h = pointCloudVec[i].point[j].doppler; 
+                cloud.points[i*30+j].s = rcsCal(pointCloudVec[i].point[j].range,pointCloudVec[i].point[j].azi,pointCloudVec[i].point[j].snr,rcsBuf);
             }
         }
     }
@@ -201,7 +217,19 @@ int main(int argc, char** argv) {
     FILE* fp = fopen(filePath, "wb");
     bool sendFlag = 0;
     long tmpTime = pointCloudBuf.pckHeader.sec;
-
+    FILE *fp_time = fopen("timeVal.txt","wt");
+    while(ros::ok())
+    {
+        memset(recvBuf,0,sizeof(POINTCLOUD));
+        ret = recvfrom(sockfd, recvBuf, 1440, 0, (struct sockaddr *)&from, &len);
+        if (ret > 0)
+		{
+            if((pointCloudBuf.pckHeader.mode == 0&&cntPointCloud[1]>0))
+            {
+                if(pointCloudVec.size()*30<cntPointCloud[0]+cntPointCloud[1])
+                {
+                    printf("FrameId %d Loss %d pack(s) in %d packs------------------------\n",pointCloudBuf.pckHeader.frameId,
+                    int(ceil(cntPointCloud[0]/30)+ceil(cntPointCloud[1]/30))-pointCloudVec.size(),int(ceil(cntPointCloud[0]/30)+ceil(cntPointCloud[1]/30)));
                 }
                 // cloud.width = pointCloudVec.size()*30;
                 // cloud.points.resize(cloud.width*cloud.height);
