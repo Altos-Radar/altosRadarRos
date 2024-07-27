@@ -71,7 +71,7 @@ void calPoint(vector<POINTCLOUD> pointCloudVec,pcl::PointCloud<pcl::PointXYZHSV>
             if(abs(pointCloudVec[i].point[j].range)>0)
             {
                 pointCloudVec[i].point[j].ele = installFlag*(pointCloudVec[i].point[j].ele);
-                pointCloudVec[i].point[j].azi = -installFlag*asin(sin(pointCloudVec[i].point[j].azi-2.2*PI/180)/cos(pointCloudVec[i].point[j].ele));
+                pointCloudVec[i].point[j].azi = -installFlag*asin(sin(pointCloudVec[i].point[j].azi-0*PI/180)/cos(pointCloudVec[i].point[j].ele));
                 cloud.points[i*30+j].x = (pointCloudVec[i].point[j].range)*cos(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele); 
                 cloud.points[i*30+j].y = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);; 
                 cloud.points[i*30+j].z = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].ele) ; 
@@ -225,6 +225,7 @@ int main(int argc,char **argv)
     FILE *fp_time = fopen("timeVal.txt","wt");
     while(ros::ok())
     {
+        memset(recvBuf,0,sizeof(POINTCLOUD));
         ret = recvfrom(sockfd, recvBuf, 1440, 0, (struct sockaddr *)&from, &len);
         if (ret > 0)
 		{
