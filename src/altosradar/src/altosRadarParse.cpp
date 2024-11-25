@@ -75,7 +75,7 @@ void calPoint(vector<POINTCLOUD> pointCloudVec,pcl::PointCloud<pcl::PointXYZHSV>
                 cloud.points[i*30+j].y = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);; 
                 cloud.points[i*30+j].z = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].ele) ; 
                 cloud.points[i*30+j].h = pointCloudVec[i].point[j].doppler; 
-                cloud.points[i*30+j].s = rcsCal(pointCloudVec[i].point[j].range,pointCloudVec[i].point[j].azi,pointCloudVec[i].point[j].snr,rcsBuf);
+                cloud.points[i*30+j].s = pointCloudVec[i].point[j].snr;//rcsCal(pointCloudVec[i].point[j].range,pointCloudVec[i].point[j].azi,pointCloudVec[i].point[j].snr,rcsBuf);
             }
         }
     }
@@ -222,6 +222,7 @@ int main(int argc, char** argv) {
     {
         memset(recvBuf,0,sizeof(POINTCLOUD));
         ret = recvfrom(sockfd, recvBuf, sizeof(POINTCLOUD), 0, (struct sockaddr *)&from, &len);
+        printf("ret = %d\t%d\n",pointCloudBuf.pckHeader.objectCount,ret);
         if (ret > 0)
 		{
             if((pointCloudBuf.pckHeader.mode == 0&&cntPointCloud[1]>0))
@@ -330,7 +331,7 @@ int main(int argc, char** argv) {
                 gettimeofday(&tv, NULL);
                 t1 = tv.tv_sec * 1000ll + tv.tv_usec / 1000;
                 localtime_r(&tmpTime, &tm);
-                fprintf(fp_time, "2:%f\n", t1 / 1e3);
+                fprintf(fp_time, "%f\n", t1 / 1e3);
                 // cloud.clear();
             }
         } else {
