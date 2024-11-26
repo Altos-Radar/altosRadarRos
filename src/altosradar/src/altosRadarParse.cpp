@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <vector>
 #include <visualization_msgs/Marker.h>
+
 using namespace std;
 #define widthSet 8000
 #define PORT 4040
@@ -26,32 +27,41 @@ using namespace std;
 #define errThr 3
 #define PI 3.1415926
 
+/// @brief Calculate the radar cross section(rcs) of single point
+/// @return rcs
 float rcsCal(float range, float azi, float snr, float* rcsBuf) {
-    int ind = (azi * 180 / PI + 60.1) * 10;
+    int ind = (azi * 180. / PI + 60.1) * 10.;
     float rcs = powf32(range, 2.6) * snr / 5.0e6 / rcsBuf[ind];
 
     return rcs;
 }
 
+/// @brief Calculate the radar ego velocity based on histogram. The assumption
+/// is that the statc points are more than the moving points.
+/// @return velocity
 float hist(vector<POINTCLOUD> pointCloudVec, float* histBuf, float step) {
     int ind = 0;
     float vr = 0;
 
     for (int i = 0; i < pointCloudVec.size(); i++) {
-        for (int j = 0; j < 30; j++) {
+        for (int j = 0; j < POINTNUM; j++) {
             if (abs(pointCloudVec[i].point[j].range) > 0) {
                 vr = pointCloudVec[i].point[j].doppler /
                      cos(pointCloudVec[i].point[j].azi);
                 ind = (vr - vrMin) / step;
-                if (vr > 60 || vr < -60 || isnan(vr)) {
+
+                // filter the abnormal doppler value
+                if (vr > vrMax || vr < vrMin || isnan(vr)) {
                     continue;
                 }
-                if (vr <= 0) {
-                    histBuf[ind]++;
-                }
+
+                // if (vr <= 0) {
+                histBuf[ind]++;
+                // }
             }
         }
     }
+
     return float(
                (max_element(histBuf, histBuf + (int((vrMax - vrMin) / step))) -
                 histBuf)) *
@@ -59,23 +69,38 @@ float hist(vector<POINTCLOUD> pointCloudVec, float* histBuf, float step) {
            vrMin;
 }
 
+/// @brief Calculate the point cloud in euclidean coordinate based on the radar
+/// data. position x,y,z, doppler h, rcs s, direction v: -1 opposite direction
+/// moving, 0 static, 1 same direction moving
+void calPoint(vector<POINTCLOUD> pointCloudVec,
+              pcl::PointCloud<pcl::PointXYZHSV>& cloud,
+              int installFlag,
+              float* rcsBuf,
+              float step,
+              float* histBuf) {
+    for (int i = 0; i < pointCloudVec.size(); i++) {
+        for (int j = 0; j < POINTNUM; j++) {
+            if (abs(pointCloudVec[i].point[j].range) > 0) {
+                pointCloudVec[i].point[j].ele =
+                    installFlag * (pointCloudVec[i].point[j].ele);
 
-void calPoint(vector<POINTCLOUD> pointCloudVec,pcl::PointCloud<pcl::PointXYZHSV> &cloud,int installFlag,float *rcsBuf,float step,float *histBuf)
-{
-
-    for(int i = 0;i<pointCloudVec.size();i++)
-    {
-        for(int j = 0;j<30;j++)
-        {
-            if(abs(pointCloudVec[i].point[j].range)>0)
-            {
-                pointCloudVec[i].point[j].ele = installFlag*(pointCloudVec[i].point[j].ele);
-
-                cloud.points[i*30+j].x = (pointCloudVec[i].point[j].range)*cos(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele); 
-                cloud.points[i*30+j].y = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);; 
-                cloud.points[i*30+j].z = (pointCloudVec[i].point[j].range)*sin(pointCloudVec[i].point[j].ele) ; 
-                cloud.points[i*30+j].h = pointCloudVec[i].point[j].doppler; 
-                cloud.points[i*30+j].s = pointCloudVec[i].point[j].snr;//rcsCal(pointCloudVec[i].point[j].range,pointCloudVec[i].point[j].azi,pointCloudVec[i].point[j].snr,rcsBuf);
+                cloud.points[i * POINTNUM + j].x =
+                    (pointCloudVec[i].point[j].range) *
+                    cos(pointCloudVec[i].point[j].azi) *
+                    cos(pointCloudVec[i].point[j].ele);
+                cloud.points[i * POINTNUM + j].y =
+                    (pointCloudVec[i].point[j].range) *
+                    sin(pointCloudVec[i].point[j].azi) *
+                    cos(pointCloudVec[i].point[j].ele);
+                cloud.points[i * POINTNUM + j].z =
+                    (pointCloudVec[i].point[j].range) *
+                    sin(pointCloudVec[i].point[j].ele);
+                cloud.points[i * POINTNUM + j].h =
+                    pointCloudVec[i].point[j].doppler;
+                cloud.points[i * POINTNUM + j].s =
+                    pointCloudVec[i]
+                        .point[j]
+                        .snr;  // rcsCal(pointCloudVec[i].point[j].range,pointCloudVec[i].point[j].azi,pointCloudVec[i].point[j].snr,rcsBuf);
             }
         }
     }
@@ -83,16 +108,16 @@ void calPoint(vector<POINTCLOUD> pointCloudVec,pcl::PointCloud<pcl::PointXYZHSV>
     float vrEst = hist(pointCloudVec, histBuf, step);
     float tmp;
     for (int i = 0; i < pointCloudVec.size(); i++) {
-        for (int j = 0; j < 30; j++) {
+        for (int j = 0; j < POINTNUM; j++) {
             if (abs(pointCloudVec[i].point[j].range) > 0) {
-                tmp = cloud.points[i * 30 + j].h -
+                tmp = cloud.points[i * POINTNUM + j].h -
                       vrEst * cos(pointCloudVec[i].point[j].azi);
                 if (tmp < -errThr) {
-                    cloud.points[i * 30 + j].v = -1;
+                    cloud.points[i * POINTNUM + j].v = -1;
                 } else if (tmp > errThr) {
-                    cloud.points[i * 30 + j].v = 1;
+                    cloud.points[i * POINTNUM + j].v = 1;
                 } else {
-                    cloud.points[i * 30 + j].v = 0;
+                    cloud.points[i * POINTNUM + j].v = 0;
                 }
             }
         }
@@ -147,9 +172,9 @@ int main(int argc, char** argv) {
     marker.color.r = 1.0f;
     marker.color.a = 1;
     geometry_msgs::Pose pose;
-    pose.position.x = (float)-5;
-    pose.position.y = 0;
-    pose.position.z = 0;
+    pose.position.x = -5.;
+    pose.position.y = 0.;
+    pose.position.z = 0.;
 
     sensor_msgs::PointCloud2 output;
     pcl::PointCloud<pcl::PointXYZHSV> cloud;
@@ -186,7 +211,7 @@ int main(int argc, char** argv) {
 
     req.imr_multiaddr.s_addr = inet_addr("224.1.2.4");
     req.imr_interface.s_addr = inet_addr(/*"0.0.0.0"*/ "192.168.3.1");
-    ;
+
     ret = setsockopt(sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &req, sizeof(req));
     if (ret < 0) {
         perror("setsockopt");
@@ -196,7 +221,7 @@ int main(int argc, char** argv) {
     int recvFrameLen = 0;
     int frameNum = 0;
     int installFlag = -1;
-    float step = 0.2;
+    float step = 0.2;  // bin size for histogram
     vector<POINTCLOUD> pointCloudVec;
     POINTCLOUD pointCloudBuf;
     char* recvBuf = (char*)&pointCloudBuf;
@@ -217,22 +242,27 @@ int main(int argc, char** argv) {
     FILE* fp = fopen(filePath, "wb");
     bool sendFlag = 0;
     long tmpTime = pointCloudBuf.pckHeader.sec;
-    FILE *fp_time = fopen("timeVal.txt","wt");
-    while(ros::ok())
-    {
-        memset(recvBuf,0,sizeof(POINTCLOUD));
-        ret = recvfrom(sockfd, recvBuf, sizeof(POINTCLOUD), 0, (struct sockaddr *)&from, &len);
-        printf("ret = %d\t%d\n",pointCloudBuf.pckHeader.objectCount,ret);
-        if (ret > 0)
-		{
-            if((pointCloudBuf.pckHeader.mode == 0&&cntPointCloud[1]>0))
-            {
-                if(pointCloudVec.size()*30<cntPointCloud[0]+cntPointCloud[1])
-                {
-                    printf("FrameId %d Loss %d pack(s) in %d packs------------------------\n",pointCloudBuf.pckHeader.frameId,
-                    int(ceil(cntPointCloud[0]/30)+ceil(cntPointCloud[1]/30))-pointCloudVec.size(),int(ceil(cntPointCloud[0]/30)+ceil(cntPointCloud[1]/30)));
+    FILE* fp_time = fopen("timeVal.txt", "wt");
+    while (ros::ok()) {
+        memset(recvBuf, 0, sizeof(POINTCLOUD));
+        ret = recvfrom(sockfd, recvBuf, sizeof(POINTCLOUD), 0,
+                       (struct sockaddr*)&from, &len);
+        printf("ret = %d\t%d\n", pointCloudBuf.pckHeader.objectCount, ret);
+        if (ret > 0) {
+            if ((pointCloudBuf.pckHeader.mode == 0 && cntPointCloud[1] > 0)) {
+                if (pointCloudVec.size() * POINTNUM <
+                    cntPointCloud[0] + cntPointCloud[1]) {
+                    printf(
+                        "FrameId %d Loss %ld pack(s) in %d "
+                        "packs------------------------\n",
+                        pointCloudBuf.pckHeader.frameId,
+                        int(ceil(cntPointCloud[0] / POINTNUM) +
+                            ceil(cntPointCloud[1] / POINTNUM)) -
+                            pointCloudVec.size(),
+                        int(ceil(cntPointCloud[0] / POINTNUM) +
+                            ceil(cntPointCloud[1] / POINTNUM)));
                 }
-                // cloud.width = pointCloudVec.size()*30;
+                // cloud.width = pointCloudVec.size()*POINTNUM;
                 // cloud.points.resize(cloud.width*cloud.height);
                 for (int k = 0; k < widthSet * 2; k++) {
                     cloud.points[k].x =
@@ -259,7 +289,6 @@ int main(int argc, char** argv) {
                 marker.pose = pose;
                 markerPub.publish(marker);
                 output.header.stamp = ros::Time::now();
-                ;
                 pub.publish(output);
                 pointCloudVec.clear();
                 cntPointCloud[0] = 0;
@@ -276,21 +305,21 @@ int main(int argc, char** argv) {
             mode = pointCloudBuf.pckHeader.mode;
             cntPointCloud[mode] = pointCloudBuf.pckHeader.objectCount;
             pointCloudVec.push_back(pointCloudBuf);
-            if ((mode == 1 &&
-                 (curObjInd + 1) * 30 >= pointCloudBuf.pckHeader.objectCount)) {
-                if (pointCloudVec.size() * 30 <
+            if ((mode == 1 && (curObjInd + 1) * POINTNUM >=
+                                  pointCloudBuf.pckHeader.objectCount)) {
+                if (pointCloudVec.size() * POINTNUM <
                     cntPointCloud[0] + cntPointCloud[1]) {
                     printf(
                         "FrameId %d %ld Loss %ld pack(s) in %d "
                         "packs------------------------\n",
                         pointCloudBuf.pckHeader.frameId, pointCloudVec.size(),
-                        int(ceil(cntPointCloud[0] / 30) +
-                            ceil(cntPointCloud[1] / 30)) -
+                        int(ceil(cntPointCloud[0] / POINTNUM) +
+                            ceil(cntPointCloud[1] / POINTNUM)) -
                             pointCloudVec.size(),
-                        int(ceil(cntPointCloud[0] / 30) +
-                            ceil(cntPointCloud[1] / 30)));
+                        int(ceil(cntPointCloud[0] / POINTNUM) +
+                            ceil(cntPointCloud[1] / POINTNUM)));
                 }
-                // cloud.width = pointCloudVec.size()*30;
+                // cloud.width = pointCloudVec.size()*POINTNUM;
                 // cloud.points.resize(cloud.width*cloud.height);
                 for (int k = 0; k < widthSet * 2; k++) {
                     cloud.points[k].x =
@@ -321,7 +350,6 @@ int main(int argc, char** argv) {
                 marker.pose = pose;
                 markerPub.publish(marker);
                 output.header.stamp = ros::Time::now();
-                ;
                 pub.publish(output);
                 pointCloudVec.clear();
                 cntPointCloud[0] = 0;
