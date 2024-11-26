@@ -98,9 +98,9 @@ void calPoint(vector<POINTCLOUD> pointCloudVec,
                 cloud.points[i * POINTNUM + j].h =
                     pointCloudVec[i].point[j].doppler;
                 cloud.points[i * POINTNUM + j].s =
-                    pointCloudVec[i]
-                        .point[j]
-                        .snr;  // rcsCal(pointCloudVec[i].point[j].range,pointCloudVec[i].point[j].azi,pointCloudVec[i].point[j].snr,rcsBuf);
+                    rcsCal(pointCloudVec[i].point[j].range,
+                           pointCloudVec[i].point[j].azi,
+                           pointCloudVec[i].point[j].snr, rcsBuf);
             }
         }
     }
