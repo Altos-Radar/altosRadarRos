@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
     ros::Publisher pub =
         nh.advertise<sensor_msgs::PointCloud2>("altosRadar", 1);
     ros::Publisher markerPub =
-        nh.advertise<visualization_msgs::Marker>("marker", 10);
+        nh.advertise<visualization_msgs::Marker>("points_number", 10);
     ros::Publisher originPub =
         nh.advertise<visualization_msgs::Marker>("origin", 10);
 

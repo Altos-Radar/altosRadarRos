@@ -4,6 +4,7 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
+        - /Marker1
         - /Marker2
       Splitter Ratio: 0.5
     Tree Height: 1813
@@ -103,12 +104,12 @@ Visualization Manager:
       Marker Topic: /origin
       Name: Marker
       Namespaces:
-        {}
+        "": true
       Queue Size: 100
       Value: true
     - Class: rviz/Marker
       Enabled: true
-      Marker Topic: /marker
+      Marker Topic: /points_number
       Name: Marker
       Namespaces:
         basic_shapes: true
