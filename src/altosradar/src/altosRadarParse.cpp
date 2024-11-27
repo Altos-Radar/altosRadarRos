@@ -218,8 +218,6 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    int recvFrameLen = 0;
-    int frameNum = 0;
     int installFlag = -1;
     float step = 0.2;  // bin size for histogram
     vector<POINTCLOUD> pointCloudVec;
@@ -230,12 +228,10 @@ int main(int argc, char** argv) {
     unsigned short curObjInd;
     struct timeval tv;
     struct tm tm;
-    int frameId[2] = {0, 0};
     int cntPointCloud[2] = {0, 0};
     gettimeofday(&tv, NULL);
     localtime_r(&tv.tv_sec, &tm);
     char filePath[1024];
-    float vrEst = 0;
     unsigned char mode;
     sprintf(filePath, "data//%d_%d_%d_%d_%d_%d_altos.dat", tm.tm_year + 1900,
             tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
@@ -262,8 +258,8 @@ int main(int argc, char** argv) {
                         int(ceil(cntPointCloud[0] / POINTNUM) +
                             ceil(cntPointCloud[1] / POINTNUM)));
                 }
-                // cloud.width = pointCloudVec.size()*POINTNUM;
-                // cloud.points.resize(cloud.width*cloud.height);
+
+                // reset the cloud
                 for (int k = 0; k < widthSet * 2; k++) {
                     cloud.points[k].x =
                         0;  //(pointCloudVec[i].point[j].range)*cos(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);
@@ -319,8 +315,8 @@ int main(int argc, char** argv) {
                         int(ceil(cntPointCloud[0] / POINTNUM) +
                             ceil(cntPointCloud[1] / POINTNUM)));
                 }
-                // cloud.width = pointCloudVec.size()*POINTNUM;
-                // cloud.points.resize(cloud.width*cloud.height);
+
+                // reset the cloud
                 for (int k = 0; k < widthSet * 2; k++) {
                     cloud.points[k].x =
                         0;  //(pointCloudVec[i].point[j].range)*cos(pointCloudVec[i].point[j].azi)*cos(pointCloudVec[i].point[j].ele);
