@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
     ros::Publisher pub =
         nh.advertise<sensor_msgs::PointCloud2>("altosRadar", 1);
     ros::Publisher markerPub =
-        nh.advertise<visualization_msgs::Marker>("TEXT_VIEW_FACING", 10);
+        nh.advertise<visualization_msgs::Marker>("marker", 10);
     ros::Publisher originPub =
         nh.advertise<visualization_msgs::Marker>("origin", 10);
 
@@ -143,22 +143,22 @@ int main(int argc, char** argv) {
     origin.header.frame_id = "altosRadar";
     origin.type = visualization_msgs::Marker::SPHERE;
     origin.action = visualization_msgs::Marker::ADD;
+    origin.header.stamp = ros::Time::now();
+    origin.pose.position.x = 0.;
+    origin.pose.position.y = 0.;
+    origin.pose.position.z = 0.;
+    origin.pose.orientation.x = 0.;
+    origin.pose.orientation.y = 0.;
+    origin.pose.orientation.z = 0.;
+    origin.pose.orientation.w = 1.;
 
-    origin.pose.position.x = 0;
-    origin.pose.position.y = 0;
-    origin.pose.position.z = 0;
-    origin.pose.orientation.x = 0;
-    origin.pose.orientation.y = 0;
-    origin.pose.orientation.z = 0;
-    origin.pose.orientation.w = 1;
-
-    origin.scale.x = 3;
-    origin.scale.y = 3;
-    origin.scale.z = 3;
-    origin.color.r = 1.0;
-    origin.color.g = 1.0;
-    origin.color.b = 0.0;
-    origin.color.a = 1;
+    origin.scale.x = 3.;
+    origin.scale.y = 3.;
+    origin.scale.z = 3.;
+    origin.color.r = 1.;
+    origin.color.g = 1.;
+    origin.color.b = 0.;
+    origin.color.a = 1.;
 
     visualization_msgs::Marker marker;
     marker.ns = "basic_shapes";
@@ -240,10 +240,12 @@ int main(int argc, char** argv) {
     long tmpTime = pointCloudBuf.pckHeader.sec;
     FILE* fp_time = fopen("timeVal.txt", "wt");
     while (ros::ok()) {
+        originPub.publish(origin);
+
         memset(recvBuf, 0, sizeof(POINTCLOUD));
         ret = recvfrom(sockfd, recvBuf, sizeof(POINTCLOUD), 0,
                        (struct sockaddr*)&from, &len);
-        printf("ret = %d\t%d\n", pointCloudBuf.pckHeader.objectCount, ret);
+        // printf("ret = %d\t%d\n", pointCloudBuf.pckHeader.objectCount, ret);
         if (ret > 0) {
             if ((pointCloudBuf.pckHeader.mode == 0 && cntPointCloud[1] > 0)) {
                 if (pointCloudVec.size() * POINTNUM <
