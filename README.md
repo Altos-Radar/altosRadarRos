@@ -1,5 +1,7 @@
 # altosRadarRos
-1. git clone https://github.com/Altos-Radar/altosRadarRos.git
+
+## Usage
+1. git clone git@github.com:Altos-Radar/altosRadarRos.git
 2. cd altosRadarRos
 3. catkin_make
 4. open terminal in altosRadarRos
@@ -15,7 +17,7 @@
    
    
 OR
-1. git clone https://github.com/Altos-Radar/altosRadarRos.git
+1. git clone git@github.com:Altos-Radar/altosRadarRos.git
 2. cd altosRadarRos
 3. catkin_make
 4. open terminal in altosRadarRos
@@ -26,3 +28,13 @@ OR
   2. source devel/setup.bash
   3. roslaunch rviz.launch
   4. rosbag play xxx.bag
+
+## Details of Output pointcloud structure
+|Field | Value|
+|---------|---------------|
+|x |x-axis coordinate in radar frame|
+|y |y-axis coordinate in radar frame|　
+|z |z-axis coordinate in radar frame|　
+|h |doppler of point|　
+|s |RCS of point|　
+|v |direction of point (-1:opposite 0:static 1:same)|　
