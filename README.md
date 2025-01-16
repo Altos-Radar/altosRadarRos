@@ -38,3 +38,27 @@ OR
 |h |doppler of point|　
 |s |RCS of point|　
 |v |direction of point (-1:opposite 0:static 1:same)|　
+
+## Docker Usage
+
+This a general docker image of Ubuntu 20. Make sure docker is already installed on your machine before running this script.
+
+1. Generate the docker image & container & come into the container for the first time
+
+```sh
+bash cicd/docker_run.sh
+```
+
+2. Exit the container
+
+```sh
+exit
+```
+
+3. Come into an exist constainer
+
+```sh
+sudo docker exec -it altos_ros_noetic_env bash
+```
+
+4. change into your target directory and compile
