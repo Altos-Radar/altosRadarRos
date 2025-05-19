@@ -132,8 +132,22 @@ int main(int argc, char** argv) {
 
     ros::init(argc, argv, "altosRadar");
     ros::NodeHandle nh;
-    ros::Publisher pub =
-        nh.advertise<sensor_msgs::PointCloud2>("altosRadar", 1);
+
+    if (argc < 2) {
+        printf("Usage: %s <port>\n", argv[0]);
+        return 0;
+    }
+    int port = atoi(argv[1]);
+    if (port < 0 || port > 65535) {
+        printf("Port number should be between 0 and 65535\n");
+        return 0;
+    }
+    if (port == 0) {
+        port = PORT;
+    }
+
+    ros::Publisher pub = nh.advertise<sensor_msgs::PointCloud2>(
+        "altosRadar" + std::to_string(port), 1);
     ros::Publisher markerPub =
         nh.advertise<visualization_msgs::Marker>("points_number", 10);
     ros::Publisher originPub =
@@ -201,7 +215,7 @@ int main(int argc, char** argv) {
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(PORT);
+    addr.sin_port = htons(port);
     addr.sin_addr.s_addr = INADDR_ANY;
     int ret = bind(sockfd, (struct sockaddr*)&addr, sizeof(addr));
     if (-1 == ret) {
@@ -239,6 +253,7 @@ int main(int argc, char** argv) {
     bool sendFlag = 0;
     long tmpTime = pointCloudBuf.pckHeader.sec;
     FILE* fp_time = fopen("timeVal.txt", "wt");
+    double init_time = -1;
     while (ros::ok()) {
         originPub.publish(origin);
 
@@ -340,10 +355,21 @@ int main(int argc, char** argv) {
                 marker.header.frame_id = "altosRadar";
                 marker.header.stamp = ros::Time::now();
                 ostringstream str;
+                double timestamp_sec =
+                    double(pointCloudBuf.pckHeader.sec) +
+                    double(pointCloudBuf.pckHeader.nsec) / 1e9;
+
+                init_time = init_time < 0 ? timestamp_sec : init_time;
+                timestamp_sec -= init_time;
+                printf("timestamp_sec: %.6f\n", timestamp_sec);
+
                 str << "pointNum:" << cntPointCloud[0] + cntPointCloud[1];
                 printf("pointNum of %d frame: %d\n",
                        pointCloudBuf.pckHeader.frameId,
                        cntPointCloud[0] + cntPointCloud[1]);
+                printf(
+                    "----------------------------------------------------\n");
+
                 marker.text = str.str();
                 marker.pose = pose;
                 markerPub.publish(marker);
@@ -361,6 +387,7 @@ int main(int argc, char** argv) {
                 // cloud.clear();
             }
         } else {
+            init_time = -1;
             printf("recv failed (timeOut)   %d\n", ret);
         }
     }

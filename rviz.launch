@@ -1,4 +1,5 @@
 <launch> 
-<node pkg="rviz" type="rviz" name="rviz"
+<arg name="node_name" default="rviz"/>
+<node pkg="rviz" type="rviz" name="$(arg node_name)"
     args="-d $(find altosradar)/altosradar.rviz"/> 
 </launch>
