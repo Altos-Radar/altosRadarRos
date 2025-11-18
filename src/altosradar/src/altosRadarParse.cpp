@@ -1,7 +1,14 @@
+/**
+ * @Author: Fengze Han
+ * @Date:   2025-01-17 15:17:44
+ * @Last Modified by:   Fengze Han
+ * @Last Modified time: 2025-11-18 12:47:14
+ */
 #include "pointCloud.h"
 #include <algorithm>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <iostream>
 #include <math.h>
 #include <netinet/in.h>
@@ -18,6 +25,10 @@
 #include <unistd.h>
 #include <vector>
 #include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
+#include <jsk_recognition_msgs/BoundingBoxArray.h>
+#include <geometry_msgs/Quaternion.h>
+#include <tf/tf.h>
 
 using namespace std;
 #define widthSet 8000
@@ -26,6 +37,43 @@ using namespace std;
 #define vrMin -60
 #define errThr 3
 #define PI 3.1415926
+
+// ------------------- Object List Wire format definitions -------------------
+// //
+#pragma pack(push, 1)
+struct ObjectDet {
+    std::uint64_t timestamp_ns{0};
+    float x{0.f}, y{0.f}, z{0.f};
+    float vx{0.f}, vy{0.f};
+    float vx_rel{0.f}, vy_rel{0.f};
+    float length{0.f}, width{0.f}, height{0.f};
+    float std_x{0.f}, std_y{0.f}, std_z{0.f};
+    float std_vx{0.f}, std_vy{0.f};
+    std::uint32_t id{0};
+    std::uint16_t lifetime{0};
+    std::uint8_t track_state{0};
+    std::uint8_t motion_state{0};
+    std::uint8_t object_type{0};
+    std::uint8_t track_quality{0};
+    std::uint8_t type_quality{0};
+    std::uint8_t size_quality{0};
+};
+static_assert(sizeof(ObjectDet) == 80,
+              "ObjectDet wire size mismatch (expected 80 bytes)");
+
+static constexpr std::size_t kMaxObjects = 150;
+
+struct ObjectsPacket {
+    PCKHEADER pckHeader{};
+    std::uint32_t sec{0};
+    std::uint32_t nsec{0};
+    std::uint32_t frameId{0};
+    std::uint32_t objectCount{0};
+    ObjectDet objects[kMaxObjects];
+};
+#pragma pack(pop)
+
+static constexpr std::size_t kObjectsOffset = offsetof(ObjectsPacket, objects);
 
 /// @brief Calculate the radar cross section(rcs) of single point
 /// @return rcs
@@ -125,6 +173,11 @@ void calPoint(vector<POINTCLOUD> pointCloudVec,
 }
 
 int main(int argc, char** argv) {
+    // print argv
+    for (int i = 0; i < argc; i++) {
+        printf("argv[%d]: %s\n", i, argv[i]);
+    }
+
     float* rcsBuf = (float*)malloc(1201 * sizeof(float));
     FILE* fp_rcs = fopen("data//rcs.dat", "rb");
     fread(rcsBuf, 1201, sizeof(float), fp_rcs);
@@ -137,6 +190,7 @@ int main(int argc, char** argv) {
         printf("Usage: %s <port>\n", argv[0]);
         return 0;
     }
+
     int port = atoi(argv[1]);
     if (port < 0 || port > 65535) {
         printf("Port number should be between 0 and 65535\n");
@@ -152,6 +206,22 @@ int main(int argc, char** argv) {
         nh.advertise<visualization_msgs::Marker>("points_number", 10);
     ros::Publisher originPub =
         nh.advertise<visualization_msgs::Marker>("origin", 10);
+
+    // Object list publishers
+    ros::Publisher pub_obj_id =
+        nh.advertise<visualization_msgs::MarkerArray>("objectsTracking", 1);
+    ros::Publisher pub_obj_bbox =
+        nh.advertise<jsk_recognition_msgs::BoundingBoxArray>(
+            "objectsTrackingBbox", 1);
+    ros::Publisher pub_obj_bbox_static =
+        nh.advertise<jsk_recognition_msgs::BoundingBoxArray>(
+            "objectsTrackingBboxStatic", 1);
+    ros::Publisher pub_obj_bbox_dynamic =
+        nh.advertise<jsk_recognition_msgs::BoundingBoxArray>(
+            "objectsTrackingBboxDynamic", 1);
+    ros::Publisher pub_obj_arrow =
+        nh.advertise<visualization_msgs::MarkerArray>("objectsTrackingArrow",
+                                                      1);
 
     visualization_msgs::Marker origin;
     origin.header.frame_id = "altosRadar";
@@ -232,6 +302,44 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    // Setup object list socket (port + 10)
+    int obj_port = port + 10;
+    int obj_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (obj_sockfd >= 0) {
+        int reuse = 1;
+        setsockopt(obj_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+        struct sockaddr_in obj_addr{};
+        obj_addr.sin_family = AF_INET;
+        obj_addr.sin_port = htons(obj_port);
+        obj_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+        if (bind(obj_sockfd, (struct sockaddr*)&obj_addr, sizeof(obj_addr)) >=
+            0) {
+            struct ip_mreq obj_req{};
+            obj_req.imr_multiaddr.s_addr = inet_addr("224.1.2.4");
+            obj_req.imr_interface.s_addr = inet_addr("192.168.3.1");
+            setsockopt(obj_sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &obj_req,
+                       sizeof(obj_req));
+
+            // Set non-blocking
+            int flags = fcntl(obj_sockfd, F_GETFL, 0);
+            if (flags >= 0) fcntl(obj_sockfd, F_SETFL, flags | O_NONBLOCK);
+
+            ROS_INFO("Object list socket listening on port %d", obj_port);
+        } else {
+            perror("Object list socket bind failed");
+            close(obj_sockfd);
+            obj_sockfd = -1;
+        }
+    } else {
+        perror("Object list socket creation failed");
+    }
+
+    // Object list configuration
+    double marker_lifetime_sec = 0.17;
+    double bbox_scale_factor = 1;
+
     int installFlag = -1;
     float step = 0.2;  // bin size for histogram
     vector<POINTCLOUD> pointCloudVec;
@@ -254,8 +362,146 @@ int main(int argc, char** argv) {
     long tmpTime = pointCloudBuf.pckHeader.sec;
     FILE* fp_time = fopen("timeVal.txt", "wt");
     double init_time = -1;
+
+    // Object list buffer
+    std::uint8_t obj_buf[16384];
+    struct sockaddr_in obj_from{};
+    socklen_t obj_fromlen = sizeof(obj_from);
+
     while (ros::ok()) {
         originPub.publish(origin);
+
+        // Poll object list socket (non-blocking)
+        if (obj_sockfd >= 0) {
+            fd_set rfds;
+            FD_ZERO(&rfds);
+            FD_SET(obj_sockfd, &rfds);
+            timeval tv_select{0, 0};
+            int r = select(obj_sockfd + 1, &rfds, nullptr, nullptr, &tv_select);
+            if (r > 0 && FD_ISSET(obj_sockfd, &rfds)) {
+                ssize_t n = recvfrom(obj_sockfd, obj_buf, sizeof(obj_buf), 0,
+                                     (struct sockaddr*)&obj_from, &obj_fromlen);
+                if (n >= static_cast<ssize_t>(kObjectsOffset)) {
+                    const auto* rawHeader =
+                        reinterpret_cast<const PCKHEADER*>(obj_buf);
+                    if (rawHeader->header == 0xABCD4321u) {
+                        std::size_t availableObjBytes =
+                            static_cast<std::size_t>(n) - kObjectsOffset;
+                        std::size_t objsInPacket =
+                            availableObjBytes / sizeof(ObjectDet);
+                        if (objsInPacket > 0 &&
+                            objsInPacket <= rawHeader->objectCount) {
+                            const auto* objs =
+                                reinterpret_cast<const ObjectDet*>(
+                                    obj_buf + kObjectsOffset);
+                            ros::Time obj_stamp(rawHeader->sec,
+                                                rawHeader->nsec);
+
+                            // Prepare object visualization messages
+                            visualization_msgs::MarkerArray id_markers;
+                            visualization_msgs::MarkerArray arrow_markers;
+                            jsk_recognition_msgs::BoundingBoxArray bbox_all;
+                            bbox_all.header.frame_id = "altosRadar";
+                            bbox_all.header.stamp = obj_stamp;
+                            jsk_recognition_msgs::BoundingBoxArray bbox_static;
+                            bbox_static.header = bbox_all.header;
+                            jsk_recognition_msgs::BoundingBoxArray bbox_dynamic;
+                            bbox_dynamic.header = bbox_all.header;
+
+                            for (std::size_t i = 0; i < objsInPacket; ++i) {
+                                const auto& o = objs[i];
+
+                                // Bounding box
+                                jsk_recognition_msgs::BoundingBox bbox;
+                                bbox.header = bbox_all.header;
+                                bbox.pose.position.x = o.x;
+                                bbox.pose.position.y = o.y;
+                                bbox.pose.position.z = o.z;
+                                double yaw = std::atan2(o.vy, o.vx);
+                                geometry_msgs::Quaternion q =
+                                    tf::createQuaternionMsgFromYaw(yaw);
+                                bbox.pose.orientation = q;
+                                bbox.dimensions.x =
+                                    o.length * bbox_scale_factor;
+                                bbox.dimensions.y = o.width * bbox_scale_factor;
+                                bbox.dimensions.z =
+                                    o.height * bbox_scale_factor;
+                                bbox_all.boxes.push_back(bbox);
+
+                                bool is_dynamic = (o.motion_state == 0);
+                                bool is_static = (o.motion_state == 1);
+                                if (is_static)
+                                    bbox_static.boxes.push_back(bbox);
+                                if (is_dynamic) {
+                                    jsk_recognition_msgs::BoundingBox dyn =
+                                        bbox;
+                                    dyn.dimensions.x = std::max(4.0f, o.length);
+                                    dyn.dimensions.y = std::max(1.8f, o.width);
+                                    dyn.dimensions.z = std::max(1.6f, o.height);
+                                    bbox_dynamic.boxes.push_back(dyn);
+                                }
+
+                                // ID marker
+                                visualization_msgs::Marker m;
+                                m.header = bbox_all.header;
+                                m.ns = "objectTracking";
+                                m.id = o.id;
+                                m.type = visualization_msgs::Marker::
+                                    TEXT_VIEW_FACING;
+                                m.action = visualization_msgs::Marker::ADD;
+                                m.text = std::to_string(o.id);
+                                m.scale.x = m.scale.y = m.scale.z = 2.8;
+                                m.color.a = 1.0;
+                                m.color.r = 1.0;
+                                m.color.g = 1.0;
+                                m.color.b = 0.0;
+                                m.pose.position.x = o.x;
+                                m.pose.position.y = o.y;
+                                m.pose.position.z = o.z + 1.5;
+                                m.pose.orientation.w = 1.0;
+                                m.lifetime = ros::Duration(marker_lifetime_sec);
+                                id_markers.markers.push_back(m);
+
+                                if (is_dynamic) {
+                                    visualization_msgs::Marker arrow;
+                                    arrow.header = bbox_all.header;
+                                    arrow.ns = "objectTrackingArrow";
+                                    arrow.id = o.id;
+                                    arrow.type =
+                                        visualization_msgs::Marker::ARROW;
+                                    arrow.action =
+                                        visualization_msgs::Marker::ADD;
+                                    arrow.scale.y = 0.5;
+                                    arrow.scale.z = 0.2;
+                                    arrow.scale.x = o.length + 1.0f;
+                                    arrow.color.a = 1.0;
+                                    arrow.color.r = 1.0;
+                                    arrow.color.g = 0.0;
+                                    arrow.color.b = 0.0;
+                                    arrow.pose.position.x = o.x;
+                                    arrow.pose.position.y = o.y;
+                                    arrow.pose.position.z = o.z;
+                                    arrow.pose.orientation = q;
+                                    arrow.lifetime =
+                                        ros::Duration(marker_lifetime_sec);
+                                    arrow_markers.markers.push_back(arrow);
+                                }
+                            }
+
+                            // Publish object messages
+                            pub_obj_id.publish(id_markers);
+                            pub_obj_bbox.publish(bbox_all);
+                            pub_obj_bbox_static.publish(bbox_static);
+                            pub_obj_bbox_dynamic.publish(bbox_dynamic);
+                            pub_obj_arrow.publish(arrow_markers);
+
+                            ROS_INFO("Published %zu objects, frameId %u",
+                                     objsInPacket, rawHeader->frameId);
+                        }
+                    }
+                }
+            }
+        }
 
         memset(recvBuf, 0, sizeof(POINTCLOUD));
         ret = recvfrom(sockfd, recvBuf, sizeof(POINTCLOUD), 0,
@@ -266,12 +512,12 @@ int main(int argc, char** argv) {
                 if (pointCloudVec.size() * POINTNUM <
                     cntPointCloud[0] + cntPointCloud[1]) {
                     printf(
-                        "FrameId %d Loss %ld pack(s) in %d "
+                        "FrameId %d Loss %lu pack(s) in %d "
                         "packs------------------------\n",
                         pointCloudBuf.pckHeader.frameId,
-                        int(ceil(cntPointCloud[0] / POINTNUM) +
-                            ceil(cntPointCloud[1] / POINTNUM)) -
-                            pointCloudVec.size(),
+                        (unsigned long)(int(ceil(cntPointCloud[0] / POINTNUM) +
+                                            ceil(cntPointCloud[1] / POINTNUM)) -
+                                        pointCloudVec.size()),
                         int(ceil(cntPointCloud[0] / POINTNUM) +
                             ceil(cntPointCloud[1] / POINTNUM)));
                 }
@@ -323,12 +569,13 @@ int main(int argc, char** argv) {
                 if (pointCloudVec.size() * POINTNUM <
                     cntPointCloud[0] + cntPointCloud[1]) {
                     printf(
-                        "FrameId %d %ld Loss %ld pack(s) in %d "
+                        "FrameId %d %lu Loss %lu pack(s) in %d "
                         "packs------------------------\n",
-                        pointCloudBuf.pckHeader.frameId, pointCloudVec.size(),
-                        int(ceil(cntPointCloud[0] / POINTNUM) +
-                            ceil(cntPointCloud[1] / POINTNUM)) -
-                            pointCloudVec.size(),
+                        pointCloudBuf.pckHeader.frameId,
+                        (unsigned long)pointCloudVec.size(),
+                        (unsigned long)(int(ceil(cntPointCloud[0] / POINTNUM) +
+                                            ceil(cntPointCloud[1] / POINTNUM)) -
+                                        pointCloudVec.size()),
                         int(ceil(cntPointCloud[0] / POINTNUM) +
                             ceil(cntPointCloud[1] / POINTNUM)));
                 }
@@ -393,6 +640,7 @@ int main(int argc, char** argv) {
     }
 
     close(sockfd);
+    if (obj_sockfd >= 0) close(obj_sockfd);
     free(histBuf);
     fclose(fp);
     fclose(fp_time);
